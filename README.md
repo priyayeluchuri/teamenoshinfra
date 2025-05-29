@@ -1,38 +1,115 @@
-=======
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Team Enosh Infra Portal
+
+A secure team portal for Enosh Infra employees to access the dashboard and manage operations.
+
+## Features
+
+- **Zoho Mail Authentication**: Login with your company Zoho email
+- **Protected Dashboard**: Secure dashboard accessible only to authenticated users
+- **Responsive Design**: Works on desktop and mobile devices
+- **Dark Theme**: Modern dark theme matching the main Enosh Infra website
+>>>>>>> 852cf65 (Phase 1)
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
+- Node.js 18+ installed
+- npm or yarn package manager
+- Zoho OAuth credentials (for production)
+
+### Installation
+
+1. Install dependencies:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Set up environment variables:
+   - Copy `.env.local.example` to `.env.local`
+   - Fill in your Zoho OAuth credentials
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. Run the development server:
+```bash
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+4. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-## Learn More
+## Project Structure
 
-To learn more about Next.js, take a look at the following resources:
+```
+teamenoshinfra/
+├── pages/
+│   ├── index.js          # Login page
+│   ├── dashboard.js      # Main dashboard
+│   └── _app.tsx         # App wrapper
+├── components/
+│   ├── DashboardNavbar.js # Navigation for authenticated users
+│   └── Footer.js         # Footer component
+├── lib/
+│   └── zoho-auth.ts     # Zoho OAuth configuration
+├── middleware.ts        # Route protection middleware
+└── styles/
+    └── globals.css      # Global styles
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Authentication Flow
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. User visits team.enoshinfra.com
+2. Redirected to login page if not authenticated
+3. User enters Zoho email
+4. Email validation checks for allowed domains
+5. On success, user is redirected to dashboard
+6. Session cookie is set for 24 hours
 
-## Deploy on Vercel
+## Allowed Email Domains
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+By default, the following domains are allowed:
+- `@enoshinfra.com`
+- `@zoho.com`
 
+<<<<<<< HEAD
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 >>>>>>> ebefd10 (Initial commit from Create Next App)
+=======
+To modify allowed domains, update the `allowedDomains` array in `pages/index.js`.
+
+## Dashboard Features
+
+The dashboard includes:
+- Property management overview
+- Client information
+- Pending inquiries
+- Revenue tracking
+- Task management
+- Recent activity feed
+
+## Security
+
+- Routes are protected by middleware
+- Session cookies expire after 24 hours
+- Email domain validation
+- HTTPS required in production
+
+## Deployment
+
+For production deployment:
+
+1. Set up Zoho OAuth application in Zoho Developer Console
+2. Update environment variables with production values
+3. Deploy to your hosting platform (Vercel, Netlify, etc.)
+4. Configure domain to point to team.enoshinfra.com
+
+## Future Enhancements
+
+- Full Zoho OAuth integration
+- Role-based access control
+- Advanced reporting features
+- Real-time notifications
+- API integration with property management system
+
+## Support
+
+For issues or questions, contact: admin@enoshinfra.com
+>>>>>>> 852cf65 (Phase 1)

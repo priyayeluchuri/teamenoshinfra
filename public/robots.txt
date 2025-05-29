@@ -1,0 +1,2 @@
+mkdir -p public
+echo -e "User-agent: *\nDisallow: /" > public/robots.txt

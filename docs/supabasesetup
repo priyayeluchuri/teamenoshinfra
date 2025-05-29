@@ -1,0 +1,68 @@
+-- supabase login -> dashboard ->new sql query -> paste below and run
+-- Creating the deals table
+CREATE TABLE deals (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  status TEXT NOT NULL CHECK (status IN ('Open', 'In Progress', 'Closed')),
+  service_type TEXT NOT NULL,
+  customer TEXT NOT NULL,
+  location TEXT NOT NULL,
+  revenue DECIMAL NOT NULL,
+  notes TEXT CHECK (LENGTH(notes) <= 500),
+  start_date DATE NOT NULL,
+  closed_date DATE,
+  created_by TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Creating indexes for performance
+CREATE INDEX idx_deals_created_by ON deals (created_by);
+CREATE INDEX idx_deals_status ON deals (status);
+CREATE INDEX idx_deals_start_date ON deals (start_date);
+
+-- Enabling RLS on deals table
+ALTER TABLE deals ENABLE ROW LEVEL SECURITY;
+
+-- Policy: All authenticated team members can select all deals
+CREATE POLICY deals_select ON deals
+  FOR SELECT
+  USING (true);
+
+-- Policy: Team members can insert their own records
+CREATE POLICY deals_insert ON deals
+  FOR INSERT
+  WITH CHECK (created_by = auth.email());
+
+-- Policy: Team members can update their own records
+CREATE POLICY deals_update ON deals
+  FOR UPDATE
+  USING (created_by = auth.email());
+
+-- Creating the team table for authentication and admin status
+CREATE TABLE team (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE,
+  is_admin BOOLEAN DEFAULT FALSE
+);
+
+-- Enabling RLS on team table
+ALTER TABLE team ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Team members can select their own record
+CREATE POLICY team_select ON team
+  FOR SELECT
+  USING (auth.email() = email);
+
+-- Policy: Admins can delete any deal
+CREATE POLICY deals_delete ON deals
+  FOR DELETE
+  USING (
+    EXISTS (
+      SELECT 1 FROM team
+      WHERE email = auth.email() AND is_admin = TRUE
+    )
+  );
+
+-- Seed initial team data
+INSERT INTO team (email, is_admin) VALUES
+  ('admin@enoshinfra.com', TRUE),
+  ('info@enoshinfra.com', FALSE);

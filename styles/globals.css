@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+/* Reset default margin & padding */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Ensure full height and dark background */
+html, body {
+  height: 100%;
+  background-color: #111827; /* Dark background */
+  color: #ffffff; /* Light text */
+  font-family: 'Inter', sans-serif;
+}
+
+/* Prevent white background from showing when scrolling */
+body {
+  overflow-x: hidden;
+}
+
+
+
+/* Links */
+a {
+  text-decoration: none;
+  color: #3b82f6; /* Blue */
+  transition: color 0.2s ease-in-out;
+}
+
+a:hover {
+  color: #60a5fa; /* Lighter blue */
+}
+
+/* Footer */
+footer {
+  background-color: #1f2937; /* Dark Gray */
+  color: #ffffff;
+  padding: 1.5rem 2rem;
+  text-align: center;
+  position: relative;
+  bottom: 0;
+  width: 100%;
+}
+/* Ensure all navbar items have consistent styling */
+nav ul li a,
+nav ul li button {
+  color: white;
+  transition: color 0.3s ease-in-out;
+}
+
+nav ul li a:hover,
+nav ul li button:hover {
+  color: #3b82f6; /* Blue on hover */
+  cursor: pointer;
+}
+
+/* Ensure the button doesn't have default styles */
+nav ul li button {
+  background: none;
+  border: none;
+  font-size: inherit;
+  font-family: inherit;
+  padding: 0;
+}
+/* Hover effect - turns blue */
+nav ul li a:hover,
+nav ul li button:hover {
+  color: #3b82f6; /* Blue */
+  cursor: pointer;
+}
+
+nav {
+  line-height: 1.2; /* Tighten text line height */
+}
