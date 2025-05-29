@@ -1,55 +1,83 @@
-import React from 'react';
-import Link from 'next/link';
+import React, { useState } from 'react';
+import { useRouter } from 'next/router';
+import { UserIcon } from '@heroicons/react/24/outline';
 import Image from 'next/image';
 
 const DashboardNavbar = ({ user, onSignOut }) => {
+  const router = useRouter();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const pages = [
+    { name: 'Dashboard', href: '/dashboard' },
+    { name: 'Clients', href: '/clients' },
+    { name: 'Properties', href: '/properties' },
+    { name: 'Reports', href: '/reports' },
+  ];
+
   return (
-    <nav className="bg-gray-800 text-white p-4 shadow-lg">
-      <div className="container mx-auto flex justify-between items-center">
-        {/* Logo */}
-        <Link href="/dashboard">
-          <Image
+    <nav className="bg-gray-900 p-4 flex items-center justify-between text-white relative">
+      {/* Logo on the left */}
+      <div className="flex items-center">
+       <Image
             src="/fullfav.png"
             alt="Enosh Infra Logo"
-            width={112}
+            width={112} // 14 (h-14) x 8 for scaling proportionally
             height={56}
-            priority
+            priority // Ensures the logo loads quickly for better LCP
+            sizes="(max-width: 768px) 56px, 112px" // Optimizes size for responsiveness 
             style={{ width: "auto", height: "auto" }}
-            className="cursor-pointer"
           />
-        </Link>
-        
-        {/* Navigation Items */}
-        <div className="flex items-center space-x-6">
-          <Link href="/dashboard" className="hover:text-blue-400 transition-colors">
-            Dashboard
-          </Link>
-          <Link href="/properties" className="hover:text-blue-400 transition-colors">
-            Properties
-          </Link>
-          <Link href="/clients" className="hover:text-blue-400 transition-colors">
-            Clients
-          </Link>
-          <Link href="/reports" className="hover:text-blue-400 transition-colors">
-            Reports
-          </Link>
-        </div>
-        
-        {/* User Info and Sign Out */}
-        <div className="flex items-center space-x-4">
-          <span className="text-sm text-gray-300">
-            Welcome, <span className="font-semibold text-white">{user?.email}</span>
-          </span>
-          <button
-            onClick={onSignOut}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-md text-sm font-medium transition-colors"
-          >
-            Sign out
-          </button>
-        </div>
+      </div>
+
+      {/* User Icon as a dropdown toggle */}
+      <div className="relative">
+        <button
+          onClick={() => setMenuOpen(!menuOpen)}
+          className="flex items-center space-x-2 focus:outline-none"
+        >
+          <UserIcon className="h-6 w-6 text-white cursor-pointer" />
+        </button>
+
+        {menuOpen && (
+          <div className="absolute right-0 mt-2 w-48 bg-gray-800 rounded shadow-lg flex flex-col text-sm z-10" 
+	  onMouseLeave={() => setMenuOpen(false)}>
+            {/* User email */}
+            <div className="px-4 py-2 border-b border-gray-700 text-gray-300">
+              {user?.email || 'Guest'}
+            </div>
+
+            {/* Navigation Links */}
+            {pages.map((page) => (
+              <button
+                key={page.href}
+                onClick={() => {
+                  router.push(page.href);
+                  setMenuOpen(false); // close menu after navigation
+                }}
+                className={`px-4 py-2 text-left text-gray-300 hover:text-white hover:bg-gray-700 transition-colors ${
+                  router.pathname === page.href ? 'font-semibold' : ''
+                }`}
+              >
+                {page.name}
+              </button>
+            ))}
+
+            {/* Logout Button */}
+            <button
+              onClick={() => {
+                onSignOut();
+                setMenuOpen(false);
+              }}
+              className="px-4 py-2 text-left text-red-500 hover:bg-red-600 hover:text-white transition-colors"
+            >
+              Logout
+            </button>
+          </div>
+        )}
       </div>
     </nav>
   );
 };
 
 export default DashboardNavbar;
+
