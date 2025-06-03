@@ -21,14 +21,31 @@ const ClientsPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    const userEmail = localStorage.getItem('userEmail');
-    if (!userEmail) {
-      router.push('/');
-    } else {
-      setUser({ email: userEmail });
-      fetchClients();
+    async function checkAuth() {
+      try {
+        const res = await fetch('/api/auth/me', { credentials: 'include' });
+        if (!res.ok) {
+          console.log('Not authenticated, redirecting to /');
+          if (router.pathname !== '/') {
+            router.push('/');
+          }
+        } else {
+          const data = await res.json();
+          setUser({ email: data.email });
+          setLoading(false);
+          fetchClients(); // Call this only when logged in
+        }
+      } catch (error) {
+        console.error('Error checking auth:', error);
+        if (router.pathname !== '/') {
+          router.push('/');
+        }
+      }
     }
+
+    checkAuth();
   }, [router]);
+
 
   const fetchClients = async () => {
     try {

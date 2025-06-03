@@ -31,15 +31,32 @@ const PropertiesPage = () => {
   const [modalContent, setModalContent] = useState<string | null>(null);
 
   useEffect(() => {
-    const userEmail = localStorage.getItem('userEmail');
-    if (!userEmail) {
-      router.push('/');
-    } else {
-      setUser({ email: userEmail });
-      fetchProperties();
+    async function checkAuth() {
+      try {
+        const res = await fetch('/api/auth/me', { credentials: 'include' });
+        if (!res.ok) {
+          console.log('Not authenticated, redirecting to /');
+          if (router.pathname !== '/') {
+            router.push('/');
+          }
+        } else {
+          const data = await res.json();
+          setUser({ email: data.email });
+          setLoading(false);
+          fetchProperties();
+	}
+      } catch (error) {
+        console.error('Error checking auth:', error);
+        if (router.pathname !== '/') {
+          router.push('/');
+        }
+      }
     }
+
+    checkAuth();
   }, [router]);
 
+	  
   const fetchProperties = async () => {
     try {
       const response = await fetch('/api/sheets-data');
@@ -140,7 +157,7 @@ const PropertiesPage = () => {
       <main className="flex-grow container mx-auto px-4 py-8">
         <div className="max-w-7xl mx-auto">
           <div className="flex justify-between items-center mb-8">
-            <h1 className="text-3xl font-bold text-white">Properties (Finding Tenants)</h1>
+            <h1 className="text-3xl font-bold text-white">Properties (Looking for Tenants)</h1>
             <button
               onClick={() => router.push('/dashboard')}
               className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition-colors"

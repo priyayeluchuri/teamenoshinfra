@@ -9,10 +9,10 @@ export function middleware(request: NextRequest) {
   const isProtectedPath = path.startsWith('/dashboard') || 
                           path.startsWith('/properties') || 
                           path.startsWith('/clients') || 
-                          path.startsWith('/reports');
+                          path.startsWith('/deals');
 
   // Check if the user has a session (in production, this would check for a valid Zoho OAuth token)
-  const hasSession = request.cookies.get('userSession');
+  const hasSession = request.cookies.get('accessToken');
 
   // Redirect to login if accessing protected path without session
   if (isProtectedPath && !hasSession) {

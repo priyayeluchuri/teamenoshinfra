@@ -33,14 +33,31 @@ const InquiriesPage = () => {
   const [modalContent, setModalContent] = useState<string | null>(null);
 
   useEffect(() => {
-    const userEmail = localStorage.getItem('userEmail');
-    if (!userEmail) {
-      router.push('/');
-    } else {
-      setUser({ email: userEmail });
-      fetchInquiries();
+    async function checkAuth() {
+      try {
+        const res = await fetch('/api/auth/me', { credentials: 'include' });
+        if (!res.ok) {
+          console.log('Not authenticated, redirecting to /');
+          if (router.pathname !== '/') {
+            router.push('/');
+          }
+        } else {
+          const data = await res.json();
+          setUser({ email: data.email });
+          setLoading(false);
+          fetchInquiries(); // Call this only when logged in
+        }
+      } catch (error) {
+        console.error('Error checking auth:', error);
+        if (router.pathname !== '/') {
+          router.push('/');
+        }
+      }
     }
+
+    checkAuth();
   }, [router]);
+
 
   const fetchInquiries = async () => {
     try {
@@ -135,7 +152,7 @@ const InquiriesPage = () => {
       <main className="flex-grow container mx-auto px-4 py-8">
         <div className="max-w-7xl mx-auto">
           <div className="flex justify-between items-center mb-8">
-            <h1 className="text-3xl font-bold text-white">Inquiries (Finding Space)</h1>
+            <h1 className="text-3xl font-bold text-white">Inquiries (Looking for Space)</h1>
             <button
               onClick={() => router.push('/dashboard')}
               className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition-colors"

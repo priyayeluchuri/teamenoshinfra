@@ -9,9 +9,11 @@ const DashboardNavbar = ({ user, onSignOut }) => {
 
   const pages = [
     { name: 'Dashboard', href: '/dashboard' },
+    { name: 'Deals', href: '/deals' },
     { name: 'Clients', href: '/clients' },
     { name: 'Properties', href: '/properties' },
-    { name: 'Reports', href: '/reports' },
+    { name: 'Inquiries', href: '/inquiries' },
+	
   ];
 
   return (
