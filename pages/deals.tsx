@@ -47,6 +47,7 @@ const DealsPage = () => {
       const { error: contextError } = await supabaseClient.rpc('set_user_context', {
         p_email: userEmail,
       });
+      console.log('Safari - Context RPC result:', { contextError });
       if (contextError) {
         throw new Error(`Context error: ${contextError.message}`);
       }
@@ -108,14 +109,16 @@ const DealsPage = () => {
 
         const data = await res.json();
         const userEmail = data.email;
-
+        console.log('Safari - User email from API:', userEmail);
+        console.log('Safari - Creating Supabase client...');
         if (!userEmail || userEmail === 'no email stored') {
           throw new Error('No email found in authentication');
         }
 
         const supabaseClient = createSupabaseClient(userEmail);
-        setSupabase(supabaseClient);
-
+        console.log('Safari - Supabase client created');
+	setSupabase(supabaseClient);
+        
         const isAuthorized = await checkTeamMembership(userEmail, supabaseClient);
         if (!isAuthorized) {
           return;
@@ -609,14 +612,14 @@ const DealsPage = () => {
           )}
 
           {(showAddForm || showEditForm) && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-              <div className="bg-gray-800 rounded-lg w-full max-w-lg max-h-[90vh] flex flex-col text-white">
-                <div className="p-6 border-b border-gray-700">
+	    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-gray-800 rounded-lg w-full max-w-lg h-[90vh] flex flex-col text-white overflow-hidden">
+	        <div className="p-6 border-b border-gray-700 flex-shrink-0"> {/* Added flex-shrink-0 */}
                   <h2 className="text-2xl font-bold">
                     {showEditForm ? 'Edit Deal' : 'Add New Deal'}
                   </h2>
                 </div>
-                <div className="flex-1 overflow-y-auto p-6">
+                <div className="overflow-y-auto px-6 py-4 grow">
                   <form
                     id="deal-form"
                     onSubmit={showEditForm ? handleEditDeal : handleAddDeal}
