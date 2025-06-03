@@ -43,17 +43,18 @@ const DealsPage = () => {
     }
 
     try {
+      console.log('user email is', userEmail)
       const { error: contextError } = await supabaseClient.rpc('set_user_context', {
-        p_email: user?.email,
+        p_email: userEmail,
       });
       if (contextError) {
         throw new Error(`Context error: ${contextError.message}`);
       }
-
       const { data, error } = await supabaseClient
-        .from('deals')
-        .select('*')
-        .order('created_at', { ascending: false });
+      .from('deals')
+      .select('*')
+      .eq('created_by', userEmail) 
+      .order('created_at', { ascending: false });
 
       if (error) {
         throw new Error(error.message);
@@ -368,10 +369,6 @@ const DealsPage = () => {
                 Dismiss
               </button>
             </div>
-          ) : filteredDeals.length === 0 ? (
-            <div className="bg-gray-800 rounded-lg p-8 text-center">
-              <p className="text-gray-400">No deals found.</p>
-            </div>
           ) : (
             <>
               <div className="flex justify-between items-center mb-4">
@@ -407,7 +404,12 @@ const DealsPage = () => {
                   </button>
                 </div>
               </div>
+	      { filteredDeals.length === 0 ? (
+                <div className="bg-gray-800 rounded-lg p-8 text-center">
+                  <p className="text-gray-400">No deals found.</p>
+                </div>
 
+              ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                 {filteredDeals.map((deal) => (
                   <div
@@ -513,6 +515,7 @@ const DealsPage = () => {
                   </div>
                 ))}
               </div>
+	      )}
             </>
           )}
 
