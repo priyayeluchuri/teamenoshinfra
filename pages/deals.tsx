@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
-import { Deal } from '../lib/dealUtils';
+import { Deal } from '../lib/dealsUtils';
 import { createSupabaseClient } from '../lib/supabase';
 import DashboardNavbar from '../components/DashboardNavbar';
 
@@ -22,10 +22,10 @@ const DealsPage = () => {
   const [newDeal, setNewDeal] = useState<Partial<Deal>>({
     service_type: 'Owner',
     status: 'Active',
-    revenue_from_owner: '',
-    revenue_from_tenant: '',
-    cost_or_budget: '',
-    size: '',
+    revenue_from_owner: 0,
+    revenue_from_tenant: 0,
+    cost_or_budget: 0,
+    size: 0,
     start_date: new Date().toISOString().split('T')[0],
   });
 
@@ -44,7 +44,7 @@ const DealsPage = () => {
 
     try {
       const { error: contextError } = await supabaseClient.rpc('set_user_context', {
-        p_email: userEmail,
+        p_email: user?.email,
       });
       if (contextError) {
         throw new Error(`Context error: ${contextError.message}`);
@@ -159,10 +159,10 @@ const DealsPage = () => {
     setNewDeal({
       service_type: 'Owner',
       status: 'Active',
-      revenue_from_owner: '',
-      revenue_from_tenant: '',
-      cost_or_budget: '',
-      size: '',
+      revenue_from_owner: 0,
+      revenue_from_tenant: 0,
+      cost_or_budget: 0,
+      size: 0,
       start_date: new Date().toISOString().split('T')[0],
       created_by: user?.email || '',
     });
@@ -184,10 +184,10 @@ const DealsPage = () => {
       service_type: newDeal.service_type || 'Owner',
       customer: newDeal.customer?.trim() || '',
       location: newDeal.location?.trim() || '',
-      size: newDeal.size ? parseFloat(newDeal.size as string) : 0,
-      cost_or_budget: newDeal.cost_or_budget ? parseFloat(newDeal.cost_or_budget as string) : 0,
-      revenue_from_owner: newDeal.revenue_from_owner ? parseFloat(newDeal.revenue_from_owner as string) : 0,
-      revenue_from_tenant: newDeal.revenue_from_tenant ? parseFloat(newDeal.revenue_from_tenant as string) : 0,
+      size: newDeal.size ? parseFloat(String(newDeal.size)) : 0,
+      cost_or_budget: newDeal.cost_or_budget ? parseFloat(String(newDeal.cost_or_budget)) : 0,
+      revenue_from_owner: newDeal.revenue_from_owner ? parseFloat(String(newDeal.revenue_from_owner)) : 0,
+      revenue_from_tenant: newDeal.revenue_from_tenant ? parseFloat(String(newDeal.revenue_from_tenant)) : 0,
       notes: newDeal.notes?.trim() || '',
       start_date: newDeal.start_date || new Date().toISOString().split('T')[0],
       closed_date: newDeal.closed_date || null,
@@ -202,7 +202,7 @@ const DealsPage = () => {
 
     try {
       const { error: contextError } = await supabase.rpc('set_user_context', {
-        p_email: user.email,
+        p_email: user?.email,
       });
       if (contextError) {
         throw new Error(`Context error: ${contextError.message}`);
@@ -234,7 +234,7 @@ const DealsPage = () => {
 
     try {
       const { error: contextError } = await supabase.rpc('set_user_context', {
-        p_email: user.email,
+       p_email: user?.email,
       });
       if (contextError) {
         throw new Error(`Context error: ${contextError.message}`);
@@ -245,11 +245,11 @@ const DealsPage = () => {
         service_type: newDeal.service_type || 'Owner',
         customer: newDeal.customer?.trim() || '',
         location: newDeal.location?.trim() || '',
-        size: newDeal.size ? parseFloat(newDeal.size as string) : 0,
-        cost_or_budget: newDeal.cost_or_budget ? parseFloat(newDeal.cost_or_budget as string) : 0,
-        revenue_from_owner: newDeal.revenue_from_owner ? parseFloat(newDeal.revenue_from_owner as string) : 0,
-        revenue_from_tenant: newDeal.revenue_from_tenant ? parseFloat(newDeal.revenue_from_tenant as string) : 0,
-        notes: newDeal.notes?.trim() || '',
+        size: newDeal.size ? parseFloat(String(newDeal.size)) : 0,
+        cost_or_budget: newDeal.cost_or_budget ? parseFloat(String(newDeal.cost_or_budget)) : 0,
+        revenue_from_owner: newDeal.revenue_from_owner ? parseFloat(String(newDeal.revenue_from_owner)) : 0,
+        revenue_from_tenant: newDeal.revenue_from_tenant ? parseFloat(String(newDeal.revenue_from_tenant)) : 0,
+	notes: newDeal.notes?.trim() || '',
         start_date: newDeal.start_date || new Date().toISOString().split('T')[0],
         closed_date: newDeal.closed_date || null,
       };
@@ -290,7 +290,7 @@ const DealsPage = () => {
 
     try {
       const { error: contextError } = await supabase.rpc('set_user_context', {
-        p_email: user.email,
+        p_email: user?.email,
       });
       if (contextError) {
         throw new Error(`Context error: ${contextError.message}`);
@@ -304,7 +304,9 @@ const DealsPage = () => {
       if (error) {
         throw new Error(`Supabase error: ${error.message} (Code: ${error.code})`);
       }
-
+      if (!user) {
+        throw new Error("User is not authenticated");
+      }
       const dealsData = await loadDeals(supabase, user.email);
       setDeals(dealsData);
       setSelectedDeal(null);
@@ -319,11 +321,11 @@ const DealsPage = () => {
   const openEditForm = (deal: Deal) => {
     setSelectedDeal(deal);
     setNewDeal({
-      ...deal,
-      revenue_from_owner: deal.revenue_from_owner?.toString() || '',
-      revenue_from_tenant: deal.revenue_from_tenant?.toString() || '',
-      cost_or_budget: deal.cost_or_budget?.toString() || '',
-      size: deal.size?.toString() || '',
+     ...deal,
+     revenue_from_owner: deal.revenue_from_owner ?? 0,
+     revenue_from_tenant: deal.revenue_from_tenant ?? 0,
+     cost_or_budget: deal.cost_or_budget ?? 0,
+     size: deal.size ?? 0,
     });
     setShowEditForm(true);
   };
