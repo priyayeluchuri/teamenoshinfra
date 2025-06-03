@@ -1,54 +1,57 @@
-import { createSupabaseClient } from '../lib/supabase';
-import { SessionContextProvider } from '@supabase/auth-helpers-react';
-import '../styles/globals.css';
+import { useState, useEffect } from 'react';
+import { AppProps } from 'next/app';
 import Modal from 'react-modal';
-import { useEffect, useState } from 'react';
+import { createSupabaseClient } from '../lib/supabase';
+import { SupabaseClient } from '@supabase/supabase-js';
+import '../styles/globals.css'; // Adjust path if different
 
 Modal.setAppElement('#__next');
 
-function MyApp({ Component, pageProps }) {
-  const [supabase, setSupabase] = useState(null);
-  const [userEmail, setUserEmail] = useState(null);
-  const [loading, setLoading] = useState(true);
+function MyApp({ Component, pageProps }: AppProps) {
+  const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    const fetchUserEmail = async () => {
+    async function initializeApp() {
       try {
-        const res = await fetch('/api/auth/me');
-        if (res.ok) {
-          const data = await res.json();
-          const email = data.email;
-          setUserEmail(email);
-          setSupabase(createSupabaseClient(email));
-        } else {
-          // Not authenticated, create client without email
-          setSupabase(createSupabaseClient(''));
+        const res = await fetch('/api/auth/me', { credentials: 'include' });
+        if (!res.ok) {
+          console.log('Not authenticated, redirecting to /');
+          setLoading(false);
+          return;
         }
+
+        const data = await res.json();
+        const email = data.email;
+        if (!email) {
+          console.log('No email found in auth response');
+          setLoading(false);
+          return;
+        }
+
+        setUserEmail(email);
+        const supabaseClient = createSupabaseClient(email);
+        setSupabase(supabaseClient);
       } catch (error) {
-        console.error('Failed to fetch user email:', error);
-        // Fallback to client without email
-        setSupabase(createSupabaseClient(''));
+        console.error('Error initializing app:', error);
       } finally {
         setLoading(false);
       }
-    };
+    }
 
-    fetchUserEmail();
+    initializeApp();
   }, []);
 
-  if (loading || !supabase) {
+  if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
-        <div>Loading...</div>
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-white">Loading...</div>
       </div>
     );
   }
 
-  return (
-    <SessionContextProvider supabaseClient={supabase} initialSession={pageProps.initialSession}>
-      <Component {...pageProps} userEmail={userEmail} />
-    </SessionContextProvider>
-  );
+  return <Component {...pageProps} supabase={supabase} userEmail={userEmail} />;
 }
 
 export default MyApp;
