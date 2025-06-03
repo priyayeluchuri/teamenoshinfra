@@ -56,13 +56,14 @@ const DealsPage = () => {
       .select('*')
       .eq('created_by', userEmail) 
       .order('created_at', { ascending: false });
-
+ console.log('Safari - Deals query result:', { data, error });
       if (error) {
         throw new Error(error.message);
       }
       return data || [];
     } catch (error) {
-      throw new Error(`Error fetching deals: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        console.error('Safari - loadDeals error:', error);
+       throw new Error(`Error fetching deals: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -73,14 +74,16 @@ const DealsPage = () => {
         .select('email')
         .eq('email', userEmail)
         .single();
-
+   console.log('Safari - Team check result:', { data, error });
       if (error || !data) {
+	            console.error('Safari - Team membership failed:', error);
         setError('Access denied: Your email is not authorized to access this application.');
         router.push('/dashboard');
         return false;
       }
       return true;
     } catch (error) {
+	          console.error('Safari - Team membership failed:', error);
       setError('Error verifying access permissions.');
       router.push('/dashboard');
       return false;
@@ -118,12 +121,12 @@ const DealsPage = () => {
         const supabaseClient = createSupabaseClient(userEmail);
         console.log('Safari - Supabase client created');
 	setSupabase(supabaseClient);
-        
+         console.log('Safari - Step 4: Checking team membership...'); 
         const isAuthorized = await checkTeamMembership(userEmail, supabaseClient);
         if (!isAuthorized) {
           return;
         }
-
+ console.log('Safari - Step 5: Setting user data...');
         const userData = { email: userEmail };
         setUser(userData);
 
@@ -132,8 +135,9 @@ const DealsPage = () => {
           created_by: userEmail,
           start_date: prev.start_date || new Date().toISOString().split('T')[0],
         }));
-
+console.log('Safari - Step 6: Loading deals...');
         const dealsData = await loadDeals(supabaseClient, userEmail);
+	    console.log('Safari - Step 6 result:', dealsData);
         setDeals(dealsData);
       } catch (err) {
         console.error('Failed to initialize app:', err);
