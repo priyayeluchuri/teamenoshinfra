@@ -10,7 +10,6 @@ const LoginPage = () => {
   useEffect(() => {
     async function checkAuth() {
       try {
-        console.log('Checking auth...');
         const res = await fetch('/api/auth/me', { credentials: 'include' });
         if (res.status === 200) {
           console.log('User authenticated, redirecting to /dashboard...');

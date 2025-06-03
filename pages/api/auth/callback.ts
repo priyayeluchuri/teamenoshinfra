@@ -14,7 +14,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const accountsServer = typeof accountsServerEncoded === 'string'
       ? decodeURIComponent(accountsServerEncoded)
       : 'https://accounts.zoho.com';
-
     // Exchange code for tokens
     const tokens = await exchangeCodeForTokens(code, accountsServer);
 
@@ -24,7 +23,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Get user info
     const userInfo = await getZohoUserInfo(tokens.access_token, accountsServer);
-
+ console.log('User info received:', {
+      Email: userInfo.Email,
+      Display_Name: userInfo.Display_Name,
+      First_Name: userInfo.First_Name,
+      Last_Name: userInfo.Last_Name,
+      full_response: userInfo // Log everything to see what Zoho returns
+    });
     if (!userInfo.Email) {
       throw new Error('User info does not contain Email');
     }
@@ -52,8 +57,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         sameSite: 'lax',
         maxAge: 60 * 60 * 24 * 30,
       }),
-    ]);
+     serialize('accountsServer', accountsServer, { // Add this
+        path: '/',
+        httpOnly: true, // Recommended for accountsServer if you only use it server-side
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 30, // Match refresh token maxAge
+      }),
 
+    ]);
     // Redirect to dashboard or home page
     res.redirect('/dashboard');
   } catch (error: any) {

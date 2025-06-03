@@ -47,7 +47,6 @@ const DealsPage = () => {
       const { error: contextError } = await supabaseClient.rpc('set_user_context', {
         p_email: userEmail,
       });
-      console.log('Safari - Context RPC result:', { contextError });
       if (contextError) {
         throw new Error(`Context error: ${contextError.message}`);
       }
@@ -56,13 +55,11 @@ const DealsPage = () => {
       .select('*')
       .eq('created_by', userEmail) 
       .order('created_at', { ascending: false });
- console.log('Safari - Deals query result:', { data, error });
       if (error) {
         throw new Error(error.message);
       }
       return data || [];
     } catch (error) {
-        console.error('Safari - loadDeals error:', error);
        throw new Error(`Error fetching deals: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
@@ -74,16 +71,13 @@ const DealsPage = () => {
         .select('email')
         .eq('email', userEmail)
         .single();
-   console.log('Safari - Team check result:', { data, error });
       if (error || !data) {
-	            console.error('Safari - Team membership failed:', error);
         setError('Access denied: Your email is not authorized to access this application.');
         router.push('/dashboard');
         return false;
       }
       return true;
     } catch (error) {
-	          console.error('Safari - Team membership failed:', error);
       setError('Error verifying access permissions.');
       router.push('/dashboard');
       return false;
@@ -112,21 +106,18 @@ const DealsPage = () => {
 
         const data = await res.json();
         const userEmail = data.email;
-        console.log('Safari - User email from API:', userEmail);
-        console.log('Safari - Creating Supabase client...');
         if (!userEmail || userEmail === 'no email stored') {
           throw new Error('No email found in authentication');
         }
 
         const supabaseClient = createSupabaseClient(userEmail);
-        console.log('Safari - Supabase client created');
 	setSupabase(supabaseClient);
-         console.log('Safari - Step 4: Checking team membership...'); 
-        const isAuthorized = await checkTeamMembership(userEmail, supabaseClient);
+        // Small delay to ensure state is set
+        await new Promise(resolve => setTimeout(resolve, 10));
+	const isAuthorized = await checkTeamMembership(userEmail, supabaseClient);
         if (!isAuthorized) {
           return;
         }
- console.log('Safari - Step 5: Setting user data...');
         const userData = { email: userEmail };
         setUser(userData);
 
@@ -135,12 +126,9 @@ const DealsPage = () => {
           created_by: userEmail,
           start_date: prev.start_date || new Date().toISOString().split('T')[0],
         }));
-console.log('Safari - Step 6: Loading deals...');
         const dealsData = await loadDeals(supabaseClient, userEmail);
-	    console.log('Safari - Step 6 result:', dealsData);
         setDeals(dealsData);
       } catch (err) {
-        console.error('Failed to initialize app:', err);
         setError(err instanceof Error ? err.message : 'Failed to initialize app');
         router.push('/api/auth/login');
       } finally {
@@ -557,7 +545,7 @@ console.log('Safari - Step 6: Loading deals...');
                   </div>
                   <div className="flex items-center">
                     <span className="font-medium text-gray-400 w-24">
-                      {selectedDeal.service_type === 'Owner' ? 'Cost' : 'Budget'}:
+                      {selectedDeal.service_type === 'Owner' ? 'Cost/sqft' : 'Budget/sqft'}:
                     </span>
                     <span>₹{selectedDeal.cost_or_budget?.toLocaleString() || '0'}</span>
                   </div>
@@ -705,7 +693,7 @@ console.log('Safari - Step 6: Loading deals...');
                       </div>
                       <div>
                         <label className="block mb-1 text-sm font-medium">
-                          {newDeal.service_type === 'Owner' ? 'Cost' : 'Budget'}
+                          {newDeal.service_type === 'Owner' ? 'Cost/sqft' : 'Budget/sqft'}
                         </label>
                         <input
                           type="text"
