@@ -8,6 +8,50 @@ import DashboardNavbar from '../components/DashboardNavbar';
 interface User {
   email: string;
 }
+const formatIndianCurrency = (numInput: number | string | null | undefined): string => {
+  // Return empty string for null, undefined, or empty input
+  if (numInput === null || numInput === undefined || numInput === '') {
+    return '';
+  }
+
+  const numStr = String(numInput);
+  // Check if the original input string ended with a decimal point
+  const isTrailingDecimal = numStr.endsWith('.');
+
+  // Clean the string: remove any characters that are not digits or a decimal point.
+  // This ensures only valid numeric characters are processed.
+  const cleanedNumStr = numStr.replace(/[^0-9.]/g, '');
+
+  // Handle cases where the input is just "." or becomes empty after cleaning
+  if (cleanedNumStr === '' || cleanedNumStr === '.') {
+    return cleanedNumStr;
+  }
+
+  // Split the number into integer and decimal parts
+  let [integerPart, decimalPart] = cleanedNumStr.split('.');
+
+  // Apply Indian comma formatting to the integer part
+  // The first comma is after 3 digits from the right, then every 2 digits.
+  if (integerPart.length > 3) {
+    let lastThree = integerPart.substring(integerPart.length - 3);
+    let otherNumbers = integerPart.substring(0, integerPart.length - 3);
+    // Use regex to insert commas for every two digits in the 'otherNumbers' part
+    otherNumbers = otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ',');
+    integerPart = otherNumbers + ',' + lastThree;
+  }
+
+  // Reconstruct the formatted value
+  let formattedValue = integerPart;
+  // If there was a decimal part, append it
+  if (decimalPart !== undefined) {
+    formattedValue += `.${decimalPart}`;
+  } else if (isTrailingDecimal) {
+    // If the original input had a trailing decimal (e.g., "123."), preserve it for typing experience
+    formattedValue += '.';
+  }
+
+  return formattedValue;
+};
 
 const DealsPage = () => {
   const [deals, setDeals] = useState<Deal[]>([]);
@@ -30,6 +74,7 @@ const DealsPage = () => {
   });
 
   const router = useRouter();
+  const ADMIN_EMAIL = 'admin@enoshinfra.com';
 
   const filteredDeals = deals && Array.isArray(deals)
     ? filter === 'All'
@@ -43,24 +88,19 @@ const DealsPage = () => {
     }
 
     try {
-      console.log('user email is', userEmail)
-      const { error: contextError } = await supabaseClient.rpc('set_user_context', {
-        p_email: userEmail,
-      });
-      if (contextError) {
-        throw new Error(`Context error: ${contextError.message}`);
-      }
+      console.log('Loading deals for user:', userEmail);
       const { data, error } = await supabaseClient
-      .from('deals')
-      .select('*')
-      .eq('created_by', userEmail) 
-      .order('created_at', { ascending: false });
+        .from('deals')
+        .select('*')
+        .eq('created_by', userEmail)
+        .order('created_at', { ascending: false });
+
       if (error) {
         throw new Error(error.message);
       }
       return data || [];
     } catch (error) {
-       throw new Error(`Error fetching deals: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(`Error fetching deals: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -71,14 +111,15 @@ const DealsPage = () => {
         .select('email')
         .eq('email', userEmail)
         .single();
+
       if (error || !data) {
-        setError('Access denied: Your email is not authorized to access this application.');
+        setError('Unauthorized to make database changes');
         router.push('/dashboard');
         return false;
       }
       return true;
     } catch (error) {
-      setError('Error verifying access permissions.');
+      setError('Unauthorized to make database changes');
       router.push('/dashboard');
       return false;
     }
@@ -110,14 +151,16 @@ const DealsPage = () => {
           throw new Error('No email found in authentication');
         }
 
-        const supabaseClient = createSupabaseClient(userEmail);
-	setSupabase(supabaseClient);
-        // Small delay to ensure state is set
+        const supabaseClient = createSupabaseClient();
+        setSupabase(supabaseClient);
+
         await new Promise(resolve => setTimeout(resolve, 10));
-	const isAuthorized = await checkTeamMembership(userEmail, supabaseClient);
+
+        const isAuthorized = await checkTeamMembership(userEmail, supabaseClient);
         if (!isAuthorized) {
           return;
         }
+
         const userData = { email: userEmail };
         setUser(userData);
 
@@ -126,6 +169,7 @@ const DealsPage = () => {
           created_by: userEmail,
           start_date: prev.start_date || new Date().toISOString().split('T')[0],
         }));
+
         const dealsData = await loadDeals(supabaseClient, userEmail);
         setDeals(dealsData);
       } catch (err) {
@@ -172,6 +216,11 @@ const DealsPage = () => {
       return;
     }
 
+    const isAuthorized = await checkTeamMembership(user.email, supabase);
+    if (!isAuthorized) {
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -197,13 +246,6 @@ const DealsPage = () => {
     }
 
     try {
-      const { error: contextError } = await supabase.rpc('set_user_context', {
-        p_email: user?.email,
-      });
-      if (contextError) {
-        throw new Error(`Context error: ${contextError.message}`);
-      }
-
       const { error } = await supabase.from('deals').insert([dealToInsert]);
       if (error) {
         throw new Error(`Supabase error: ${error.message} (Code: ${error.code})`);
@@ -225,17 +267,21 @@ const DealsPage = () => {
     e.preventDefault();
     if (!selectedDeal || !user || !supabase) return;
 
+    const isAuthorized = await checkTeamMembership(user.email, supabase);
+    if (!isAuthorized) {
+      return;
+    }
+
+    if (user.email !== selectedDeal.created_by && user.email !== ADMIN_EMAIL) {
+      setError('Unauthorized: You can only edit deals you created.');
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
-      const { error: contextError } = await supabase.rpc('set_user_context', {
-       p_email: user?.email,
-      });
-      if (contextError) {
-        throw new Error(`Context error: ${contextError.message}`);
-      }
-
       const dealToUpdate = {
         status: newDeal.status || 'Active',
         service_type: newDeal.service_type || 'Owner',
@@ -245,7 +291,7 @@ const DealsPage = () => {
         cost_or_budget: newDeal.cost_or_budget ? parseFloat(String(newDeal.cost_or_budget)) : 0,
         revenue_from_owner: newDeal.revenue_from_owner ? parseFloat(String(newDeal.revenue_from_owner)) : 0,
         revenue_from_tenant: newDeal.revenue_from_tenant ? parseFloat(String(newDeal.revenue_from_tenant)) : 0,
-	notes: newDeal.notes?.trim() || '',
+        notes: newDeal.notes?.trim() || '',
         start_date: newDeal.start_date || new Date().toISOString().split('T')[0],
         closed_date: newDeal.closed_date || null,
       };
@@ -279,19 +325,29 @@ const DealsPage = () => {
   };
 
   const handleDeleteDeal = async (dealId: string) => {
-    if (!confirm('Are you sure you want to delete this deal?') || !supabase) return;
+    if (!confirm('Are you sure you want to delete this deal?') || !supabase || !user) return;
+
+    const isAuthorized = await checkTeamMembership(user.email, supabase);
+    if (!isAuthorized) {
+      return;
+    }
+
+    const deal = deals.find((d) => d.id === dealId);
+    if (!deal) {
+      setError('Deal not found.');
+      return;
+    }
+
+    if (user.email !== deal.created_by && user.email !== ADMIN_EMAIL) {
+      setError('Unauthorized: You can only delete deals you created.');
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
     setError(null);
 
     try {
-      const { error: contextError } = await supabase.rpc('set_user_context', {
-        p_email: user?.email,
-      });
-      if (contextError) {
-        throw new Error(`Context error: ${contextError.message}`);
-      }
-
       const { error } = await supabase
         .from('deals')
         .delete()
@@ -300,9 +356,7 @@ const DealsPage = () => {
       if (error) {
         throw new Error(`Supabase error: ${error.message} (Code: ${error.code})`);
       }
-      if (!user) {
-        throw new Error("User is not authenticated");
-      }
+
       const dealsData = await loadDeals(supabase, user.email);
       setDeals(dealsData);
       setSelectedDeal(null);
@@ -317,23 +371,35 @@ const DealsPage = () => {
   const openEditForm = (deal: Deal) => {
     setSelectedDeal(deal);
     setNewDeal({
-     ...deal,
-     revenue_from_owner: deal.revenue_from_owner ?? 0,
-     revenue_from_tenant: deal.revenue_from_tenant ?? 0,
-     cost_or_budget: deal.cost_or_budget ?? 0,
-     size: deal.size ?? 0,
+      ...deal,
+      revenue_from_owner: deal.revenue_from_owner ?? 0,
+      revenue_from_tenant: deal.revenue_from_tenant ?? 0,
+      cost_or_budget: deal.cost_or_budget ?? 0,
+      size: deal.size ?? 0,
     });
     setShowEditForm(true);
   };
 
+   // Modified handleNumericChange to store cleaned string value in state
   const handleNumericChange = (
     field: 'revenue_from_owner' | 'revenue_from_tenant' | 'cost_or_budget' | 'size',
     value: string
   ) => {
-    if (value === '' || /^[0-9]*\.?[0-9]*$/.test(value)) {
-      setNewDeal({ ...newDeal, [field]: value });
+    // Remove all characters that are not digits or a single decimal point.
+    // This allows for numbers like "123", "123.45", ".5", "123.".
+    // It prevents multiple decimal points by only taking the first part split by '.'
+    const parts = value.split('.');
+    let cleanedValue = parts[0].replace(/[^0-9]/g, ''); // Clean integer part (remove non-digits)
+    if (parts.length > 1) {
+      // If there's a decimal part, append it after cleaning it (remove non-digits from decimal part)
+      cleanedValue += '.' + parts.slice(1).join('').replace(/[^0-9]/g, '');
     }
+
+    // Update the state with the cleaned string value.
+    // The input's value prop will then use formatIndianCurrency to display this string.
+    setNewDeal((prev) => ({ ...prev, [field]: cleanedValue }));
   };
+
 
   return (
     <div className="min-h-screen bg-gray-900 flex flex-col">
@@ -399,64 +465,30 @@ const DealsPage = () => {
                   </button>
                 </div>
               </div>
-	      { filteredDeals.length === 0 ? (
+              {filteredDeals.length === 0 ? (
                 <div className="bg-gray-800 rounded-lg p-8 text-center">
                   <p className="text-gray-400">No deals found.</p>
                 </div>
-
               ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                {filteredDeals.map((deal) => (
-                  <div
-                    key={deal.id}
-                    className="bg-gray-800 rounded-lg p-6 hover:bg-gray-700 transition-colors cursor-pointer"
-                    onClick={() => setSelectedDeal(deal)}
-                  >
-                    <div className="flex items-center mb-4">
-                      <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
-                        {deal.customer ? deal.customer.charAt(0).toUpperCase() : '?'}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                  {filteredDeals.map((deal) => (
+                    <div
+                      key={deal.id}
+                      className="bg-gray-800 rounded-lg p-6 hover:bg-gray-700 transition-colors cursor-pointer"
+                      onClick={() => setSelectedDeal(deal)}
+                    >
+                      <div className="flex items-center mb-4">
+                        <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
+                          {deal.customer ? deal.customer.charAt(0).toUpperCase() : '?'}
+                        </div>
+                        <div className="ml-4">
+                          <h3 className="text-lg font-semibold text-white">
+                            {deal.customer || 'Unknown Deal'}
+                          </h3>
+                          <p className="text-sm text-gray-400">ID: {deal.id}</p>
+                        </div>
                       </div>
-                      <div className="ml-4">
-                        <h3 className="text-lg font-semibold text-white">
-                          {deal.customer || 'Unknown Deal'}
-                        </h3>
-                        <p className="text-sm text-gray-400">ID: {deal.id}</p>
-                      </div>
-                    </div>
-                    <div className="space-y-2 text-sm text-gray-300">
-                      <div className="flex items-center">
-                        <svg
-                          className="w-4 h-4 mr-2 text-gray-400"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                          />
-                        </svg>
-                        <span>{deal.created_by || '-'}</span>
-                      </div>
-                      <div className="flex items-center">
-                        <svg
-                          className="w-4 h-4 mr-2 text-gray-400"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M17.657 16.657A8 8 0 118.343 7.343 8 8 0 0117.657 16.657z"
-                          />
-                        </svg>
-                        <span>{deal.location || '-'}</span>
-                      </div>
-                      {deal.size ? (
+                      <div className="space-y-2 text-sm text-gray-300">
                         <div className="flex items-center">
                           <svg
                             className="w-4 h-4 mr-2 text-gray-400"
@@ -468,145 +500,184 @@ const DealsPage = () => {
                               strokeLinecap="round"
                               strokeLinejoin="round"
                               strokeWidth={2}
-                              d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                              d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
                             />
                           </svg>
-                          <span>{deal.size} sq ft</span>
+                          <span>{deal.created_by || '-'}</span>
                         </div>
-                      ) : null}
-                      <div className="flex items-center">
-                        <svg
-                          className="w-4 h-4 mr-2 text-gray-400"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                          />
-                        </svg>
-                        <span>₹{deal.cost_or_budget?.toLocaleString() || '0'}</span>
-                      </div>
-                      <div className="flex items-center">
-                        <svg
-                          className="w-4 h-4 mr-2 text-gray-400"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-                          />
-                        </svg>
-                        <span>₹{deal.total_revenue?.toLocaleString() || '0'}</span>
+                        <div className="flex items-center">
+                          <svg
+                            className="w-4 h-4 mr-2 text-gray-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M17.657 16.657A8 8 0 118.343 7.343 8 8 0 0117.657 16.657z"
+                            />
+                          </svg>
+                          <span>{deal.location || '-'}</span>
+                        </div>
+                        {deal.size ? (
+                          <div className="flex items-center">
+                            <svg
+                              className="w-4 h-4 mr-2 text-gray-400"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                              />
+                            </svg>
+                            <span>{deal.size} sq ft</span>
+                          </div>
+                        ) : null}
+                        <div className="flex items-center">
+                          <svg
+                            className="w-4 h-4 mr-2 text-gray-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
+                          </svg>
+                          <span>₹{deal.cost_or_budget?.toLocaleString() || '0'}</span>
+                        </div>
+                        <div className="flex items-center">
+                          <svg
+                            className="w-4 h-4 mr-2 text-gray-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                            />
+                          </svg>
+                          <span>₹{deal.total_revenue?.toLocaleString() || '0'}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-	      )}
+                  ))}
+                </div>
+              )}
             </>
           )}
 
           {selectedDeal && !showEditForm && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40">
-              <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full text-white mx-4">
-                <h2 className="text-2xl font-bold mb-4 text-white">{selectedDeal.customer}</h2>
-                <div className="space-y-4 text-sm text-gray-300">
-                  <div className="flex items-center">
-                    <span className="font-medium text-gray-400 w-24">Status:</span>
-                    <span
-                      className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-                        selectedDeal.status === 'Active'
-                          ? 'bg-green-200 text-green-800'
-                          : 'bg-red-200 text-red-800'
-                      }`}
-                    >
-                      {selectedDeal.status}
-                    </span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="font-medium text-gray-400 w-24">Service Type:</span>
-                    <span>{selectedDeal.service_type}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="font-medium text-gray-400 w-24">Location:</span>
-                    <span>{selectedDeal.location}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="font-medium text-gray-400 w-24">Size:</span>
-                    <span>{selectedDeal.size ? `${selectedDeal.size} sq.ft` : 'N/A'}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="font-medium text-gray-400 w-24">
-                      {selectedDeal.service_type === 'Owner' ? 'Cost/sqft' : 'Budget/sqft'}:
-                    </span>
-                    <span>₹{selectedDeal.cost_or_budget?.toLocaleString() || '0'}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="font-medium text-gray-400 w-24">Revenue (Owner):</span>
-                    <span>₹{selectedDeal.revenue_from_owner?.toLocaleString() || '0'}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="font-medium text-gray-400 w-24">Revenue (Tenant):</span>
-                    <span>₹{selectedDeal.revenue_from_tenant?.toLocaleString() || '0'}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="font-medium text-gray-400 w-24">Total Revenue:</span>
-                    <span>₹{selectedDeal.total_revenue?.toLocaleString() || '0'}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="font-medium text-gray-400 w-24">Notes:</span>
-                    <span>{selectedDeal.notes || 'N/A'}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="font-medium text-gray-400 w-24">Start Date:</span>
-                    <span>{selectedDeal.start_date || 'N/A'}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="font-medium text-gray-400 w-24">Closed Date:</span>
-                    <span>{selectedDeal.closed_date || 'N/A'}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="font-medium text-gray-400 w-24">Created By:</span>
-                    <span>{selectedDeal.created_by}</span>
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40 p-4">
+              <div className="bg-gray-800 rounded-lg max-w-md w-full max-h-[80vh] flex flex-col text-white mx-4 overflow-hidden">
+                <div className="p-6 border-b border-gray-700 flex-shrink-0">
+                  <h2 className="text-2xl font-bold text-white">{selectedDeal.customer}</h2>
+                </div>
+                <div className="p-6 overflow-y-auto flex-grow">
+                  <div className="space-y-4 text-sm text-gray-300">
+                    <div className="flex items-center">
+                      <span className="font-medium text-gray-400 w-24">Status:</span>
+                      <span
+                        className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                          selectedDeal.status === 'Active'
+                            ? 'bg-green-200 text-green-800'
+                            : 'bg-red-200 text-red-800'
+                        }`}
+                      >
+                        {selectedDeal.status}
+                      </span>
+                    </div>
+                    <div className="flex items-center">
+                      <span className="font-medium text-gray-400 w-24">Service Type:</span>
+                      <span>{selectedDeal.service_type}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <span className="font-medium text-gray-400 w-24">Location:</span>
+                      <span>{selectedDeal.location}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <span className="font-medium text-gray-400 w-24">Size:</span>
+                      <span>{selectedDeal.size ? `${selectedDeal.size} sq.ft` : 'N/A'}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <span className="font-medium text-gray-400 w-24">
+                        {selectedDeal.service_type === 'Owner' ? 'Cost/sqft' : 'Budget/sqft'}:
+                      </span>
+                      <span>₹{selectedDeal.cost_or_budget?.toLocaleString() || '0'}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <span className="font-medium text-gray-400 w-24">Revenue (Owner):</span>
+                      <span>₹{selectedDeal.revenue_from_owner?.toLocaleString() || '0'}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <span className="font-medium text-gray-400 w-24">Revenue (Tenant):</span>
+                      <span>₹{selectedDeal.revenue_from_tenant?.toLocaleString() || '0'}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <span className="font-medium text-gray-400 w-24">Total Revenue:</span>
+                      <span>₹{selectedDeal.total_revenue?.toLocaleString() || '0'}</span>
+                    </div>
+                    <div className="flex items-start">
+                      <span className="font-medium text-gray-400 w-24">Notes:</span>
+                      <span className="whitespace-pre-wrap">{selectedDeal.notes || 'N/A'}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <span className="font-medium text-gray-400 w-24">Start Date:</span>
+                      <span>{selectedDeal.start_date || 'N/A'}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <span className="font-medium text-gray-400 w-24">Closed Date:</span>
+                      <span>{selectedDeal.closed_date || 'N/A'}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <span className="font-medium text-gray-400 w-24">Created By:</span>
+                      <span>{selectedDeal.created_by}</span>
+                    </div>
                   </div>
                 </div>
-                <div className="mt-6 flex gap-2 flex-wrap justify-end">
-                  <button
-                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-500 transition text-sm"
-                    onClick={() => openEditForm(selectedDeal)}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-500 transition text-sm"
-                    onClick={() => handleDeleteDeal(selectedDeal.id)}
-                    disabled={loading}
-                  >
-                    {loading ? 'Deleting...' : 'Delete'}
-                  </button>
-                  <button
-                    className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-500 transition text-sm"
-                    onClick={() => setSelectedDeal(null)}
-                  >
-                    Close
-                  </button>
+                <div className="p-6 border-t border-gray-700 flex-shrink-0">
+                  <div className="flex gap-2 flex-wrap justify-end">
+                    <button
+                      className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-500 transition text-sm"
+                      onClick={() => openEditForm(selectedDeal)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-500 transition text-sm"
+                      onClick={() => handleDeleteDeal(selectedDeal.id)}
+                      disabled={loading}
+                    >
+                      {loading ? 'Deleting...' : 'Delete'}
+                    </button>
+                    <button
+                      className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-500 transition text-sm"
+                      onClick={() => setSelectedDeal(null)}
+                    >
+                      Close
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
           {(showAddForm || showEditForm) && (
-	    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
               <div className="bg-gray-800 rounded-lg w-full max-w-lg h-[90vh] flex flex-col text-white overflow-hidden">
-	        <div className="p-6 border-b border-gray-700 flex-shrink-0"> {/* Added flex-shrink-0 */}
+                <div className="p-6 border-b border-gray-700 flex-shrink-0">
                   <h2 className="text-2xl font-bold">
                     {showEditForm ? 'Edit Deal' : 'Add New Deal'}
                   </h2>
@@ -713,7 +784,7 @@ const DealsPage = () => {
                         </label>
                         <input
                           type="text"
-                          value={newDeal.revenue_from_owner || ''}
+			  value={formatIndianCurrency(newDeal.revenue_from_owner)}
                           onChange={(e) =>
                             handleNumericChange('revenue_from_owner', e.target.value)
                           }
@@ -727,7 +798,7 @@ const DealsPage = () => {
                         </label>
                         <input
                           type="text"
-                          value={newDeal.revenue_from_tenant || ''}
+			  value={formatIndianCurrency(newDeal.revenue_from_tenant)}
                           onChange={(e) =>
                             handleNumericChange('revenue_from_tenant', e.target.value)
                           }

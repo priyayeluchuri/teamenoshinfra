@@ -75,3 +75,16 @@ CREATE POLICY deals_delete ON deals
       WHERE email = auth.email() AND is_admin = TRUE
     )
   );
+
+Removed RLS:
+    Drop all RLS policies on the deals table:
+
+DROP POLICY IF EXISTS deals_select ON deals;
+DROP POLICY IF EXISTS deals_insert ON deals;
+DROP POLICY IF EXISTS deals_update ON deals;
+DROP POLICY IF EXISTS deals_delete ON deals;
+DROP POLICY IF EXISTS deals_delete_admin ON deals;
+
+    Disable RLS entirely on the deals table:
+
+ALTER TABLE deals DISABLE ROW LEVEL SECURITY;

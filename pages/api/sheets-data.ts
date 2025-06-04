@@ -8,6 +8,18 @@ export default async function handler(
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+   const { accessToken, zohoUserEmail } = req.cookies; // Get cookies from the request.
+
+  // 1. Authentication check (based on me.ts logic).
+  if (!accessToken) { // If accessToken is missing, return 401 Unauthorized.
+    return res.status(401).json({ success: false, error: 'Unauthorized: Access token missing.' });
+  }
+
+  if (!zohoUserEmail || zohoUserEmail === 'no email stored') { // If zohoUserEmail is missing or "no email stored", return 401 Unauthorized.
+    return res.status(401).json({ success: false, error: 'Unauthorized: Zoho user email not found.' });
+  }
+
+  const userEmail = zohoUserEmail; // Assign the zohoUserEmail to userEmail.
 
   try {
     let data;
