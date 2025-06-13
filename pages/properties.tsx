@@ -29,6 +29,8 @@ const PropertiesPage = () => {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalContent, setModalContent] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<'date' | 'size'>('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
     async function checkAuth() {
@@ -44,7 +46,7 @@ const PropertiesPage = () => {
           setUser({ email: data.email });
           setLoading(false);
           fetchProperties();
-	}
+        }
       } catch (error) {
         console.error('Error checking auth:', error);
         if (router.pathname !== '/') {
@@ -56,7 +58,6 @@ const PropertiesPage = () => {
     checkAuth();
   }, [router]);
 
-	  
   const fetchProperties = async () => {
     try {
       const response = await fetch('/api/sheets-data');
@@ -64,12 +65,8 @@ const PropertiesPage = () => {
       
       if (result.success) {
         const transformedProperties = result.data.properties.map((prop: any) => {
-          // Get the raw location string
           let rawLocation = prop.details.col_D || '';
-          
-          // Add line breaks after each occurrence of "India"
           let location = rawLocation.replace(/(India),?\s*/g, '$1\n'); 
-	  // Clean up any extra whitespace but preserve line breaks
           location = location.replace(/[ \t]+/g, ' ').trim() || 'N/A';
 
           return {
@@ -84,11 +81,7 @@ const PropertiesPage = () => {
           };
         });
 
-        // Sort by Time IST (newest to oldest)
-        const sortedProperties = transformedProperties.sort((a: Property, b: Property) => {
-          return new Date(b.timeIST).getTime() - new Date(a.timeIST).getTime();
-        });
-        setProperties(sortedProperties);
+        sortProperties(transformedProperties, sortBy, sortOrder);
         setClients(result.data.clients);
       } else {
         console.error('API response unsuccessful:', result);
@@ -100,13 +93,56 @@ const PropertiesPage = () => {
     }
   };
 
+  const sortProperties = (propertiesToSort: Property[], sortType: 'date' | 'size', order: 'asc' | 'desc') => {
+    const sortedProperties = [...propertiesToSort].sort((a, b) => {
+      if (sortType === 'date') {
+        const dateA = new Date(a.timeIST).getTime();
+        const dateB = new Date(b.timeIST).getTime();
+        return order === 'asc' ? dateA - dateB : dateB - dateA;
+      } else {
+        const sizeA = extractSizeNumber(a.description);
+        const sizeB = extractSizeNumber(b.description);
+        
+        // Handle N/A cases (null values) to always appear at the bottom
+        if (sizeA === null && sizeB === null) return 0;
+        if (sizeA === null) return 1; // N/A goes to bottom
+        if (sizeB === null) return -1; // N/A goes to bottom
+        
+        return order === 'asc' ? sizeA - sizeB : sizeB - sizeA;
+      }
+    });
+    setProperties(sortedProperties);
+  };
+
+  const extractSizeNumber = (description: string): number | null => {
+    try {
+      const sizeMatch = description.match(/(\d+(?:\s*[-+]\s*\d+)?)\s*(?:sq\s*ft|square\s*feet|sft|sqft|sq\s*feet|sqmtrs|acres|sat)/i);
+      if (!sizeMatch) return null;
+      const sizeStr = sizeMatch[1].replace(/\s+/g, '');
+      if (sizeStr.includes('-')) {
+        const [min, max] = sizeStr.split('-').map(Number);
+        return (min + max) / 2; // Use average for ranges
+      }
+      return Number(sizeStr);
+    } catch (error) {
+      console.error('Error in extractSizeNumber:', error);
+      return null;
+    }
+  };
+
+  const handleSort = (type: 'date' | 'size') => {
+    const newOrder = sortBy === type && sortOrder === 'desc' ? 'asc' : 'desc';
+    setSortBy(type);
+    setSortOrder(newOrder);
+    sortProperties(properties, type, newOrder);
+  };
+
   const handleSignOut = () => {
     localStorage.removeItem('userEmail');
     document.cookie = 'userSession=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
     router.push('/');
   };
 
-  // Extract size from description
   const extractSize = (description: string): string => {
     try {
       const sizeMatch = description.match(/(\d+(?:\s*[-+]\s*\d+)?\s*(?:sq\s*ft|square\s*feet|sft|sqft|sq\s*feet|sqmtrs|acres|sat))/i);
@@ -117,7 +153,6 @@ const PropertiesPage = () => {
     }
   };
 
-  // Extract price from description
   const extractPrice = (description: string): string => {
     try {
       const priceMatch = description.match(/(?:₹|\$|rs|rupees)[\d,]+(?:\.\d{2})?\s*(?:per\s*(?:sq\s*ft|sft|sqft|feet))?(?:\s*(?:slightly\s*negotiable|negotiable)?)?/i);
@@ -128,7 +163,6 @@ const PropertiesPage = () => {
     }
   };
 
-  // Show client details in modal
   const handleViewClient = (clientEmail: string, property: Property) => {
     const client = clients.find((c) => c.email === clientEmail);
     if (client) {
@@ -140,12 +174,10 @@ const PropertiesPage = () => {
     }
   };
 
-  // Show description in modal
-  const handleViewDescription = (description: string) => {
-    setModalContent(`Description:\n${description || 'No description available'}`);
+  const handleViewDescription = (description: string, timeIST: string) => {
+    setModalContent(`Property Date: ${timeIST || 'N/A'}\n\nDescription:\n${description || 'No description available'}`);
   };
 
-  // Close modal
   const closeModal = () => {
     setModalContent(null);
   };
@@ -158,12 +190,30 @@ const PropertiesPage = () => {
         <div className="max-w-7xl mx-auto">
           <div className="flex justify-between items-center mb-8">
             <h1 className="text-3xl font-bold text-white">Properties (Looking for Tenants)</h1>
-            <button
-              onClick={() => router.push('/dashboard')}
-              className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition-colors"
-            >
-              Back to Dashboard
-            </button>
+            <div className="flex space-x-4">
+              <button
+                onClick={() => handleSort('date')}
+                className={`px-4 py-2 rounded text-white transition-colors ${
+                  sortBy === 'date' ? 'bg-blue-600 hover:bg-blue-500' : 'bg-gray-700 hover:bg-gray-600'
+                }`}
+              >
+                Sort by Date {sortBy === 'date' ? (sortOrder === 'desc' ? '↓' : '↑') : ''}
+              </button>
+              <button
+                onClick={() => handleSort('size')}
+                className={`px-4 py-2 rounded text-white transition-colors ${
+                  sortBy === 'size' ? 'bg-blue-600 hover:bg-blue-500' : 'bg-gray-700 hover:bg-gray-600'
+                }`}
+              >
+                Sort by Size {sortBy === 'size' ? (sortOrder === 'desc' ? '↓' : '↑') : ''}
+              </button>
+              <button
+                onClick={() => router.push('/dashboard')}
+                className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition-colors"
+              >
+                Back to Dashboard
+              </button>
+            </div>
           </div>
 
           {loading ? (
@@ -203,7 +253,7 @@ const PropertiesPage = () => {
                             👤
                           </button>
                           <button
-                            onClick={() => handleViewDescription(property.description)}
+                            onClick={() => handleViewDescription(property.description, property.timeIST)}
                             className="text-blue-400 hover:text-blue-300 transition-colors text-lg"
                             title="View Description"
                           >

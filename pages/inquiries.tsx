@@ -31,6 +31,8 @@ const InquiriesPage = () => {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalContent, setModalContent] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<'date' | 'size'>('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
     async function checkAuth() {
@@ -45,7 +47,7 @@ const InquiriesPage = () => {
           const data = await res.json();
           setUser({ email: data.email });
           setLoading(false);
-          fetchInquiries(); // Call this only when logged in
+          fetchInquiries();
         }
       } catch (error) {
         console.error('Error checking auth:', error);
@@ -58,7 +60,6 @@ const InquiriesPage = () => {
     checkAuth();
   }, [router]);
 
-
   const fetchInquiries = async () => {
     try {
       const response = await fetch('/api/sheets-data');
@@ -66,12 +67,10 @@ const InquiriesPage = () => {
       
       if (result.success) {
         const transformedInquiries = result.data.inquiries.map((inquiry: any) => {
-          // Get the raw location string and add line breaks after "India"
           let rawLocation = inquiry.details?.col_D || inquiry['Preferred Location'] || inquiry['Location'] || '';
           let location = rawLocation.replace(/(India),?\s*/g, '$1\n');
           location = location.replace(/[ \t]+/g, ' ').trim() || 'N/A';
 
-          // Debug log to see the actual structure
           console.log('Inquiry data:', inquiry);
 
           return {
@@ -88,12 +87,7 @@ const InquiriesPage = () => {
           };
         });
 
-        // Sort by Time IST (newest to oldest)
-        const sortedInquiries = transformedInquiries.sort((a: Inquiry, b: Inquiry) => {
-          return new Date(b.timeIST).getTime() - new Date(a.timeIST).getTime();
-        });
-        setInquiries(sortedInquiries);
-        setClients(result.data.clients || []);
+        sortInquiries(transformedInquiries, sortBy, sortOrder);
       } else {
         console.error('API response unsuccessful:', result);
       }
@@ -104,13 +98,56 @@ const InquiriesPage = () => {
     }
   };
 
+  const sortInquiries = (inquiriesToSort: Inquiry[], sortType: 'date' | 'size', order: 'asc' | 'desc') => {
+    const sortedInquiries = [...inquiriesToSort].sort((a, b) => {
+      if (sortType === 'date') {
+        const dateA = new Date(a.timeIST).getTime();
+        const dateB = new Date(b.timeIST).getTime();
+        return order === 'asc' ? dateA - dateB : dateB - dateA;
+      } else {
+        const sizeA = extractSizeNumber(a.description);
+        const sizeB = extractSizeNumber(b.description);
+        
+        // Handle N/A cases (null values) to always appear at the bottom
+        if (sizeA === null && sizeB === null) return 0;
+        if (sizeA === null) return 1; // N/A goes to bottom
+        if (sizeB === null) return -1; // N/A goes to bottom
+        
+        return order === 'asc' ? sizeA - sizeB : sizeB - sizeA;
+      }
+    });
+    setInquiries(sortedInquiries);
+  };
+
+  const extractSizeNumber = (description: string): number | null => {
+    try {
+      const sizeMatch = description.match(/(\d+(?:\s*[-+]\s*\d+)?)\s*(?:sq\s*ft|square\s*feet|sft|sqft|sq\s*feet|sqmtrs|acres|sat)/i);
+      if (!sizeMatch) return null;
+      const sizeStr = sizeMatch[1].replace(/\s+/g, '');
+      if (sizeStr.includes('-')) {
+        const [min, max] = sizeStr.split('-').map(Number);
+        return (min + max) / 2; // Use average for ranges
+      }
+      return Number(sizeStr);
+    } catch (error) {
+      console.error('Error in extractSizeNumber:', error);
+      return null;
+    }
+  };
+
+  const handleSort = (type: 'date' | 'size') => {
+    const newOrder = sortBy === type && sortOrder === 'desc' ? 'asc' : 'desc';
+    setSortBy(type);
+    setSortOrder(newOrder);
+    sortInquiries(inquiries, type, newOrder);
+  };
+
   const handleSignOut = () => {
     localStorage.removeItem('userEmail');
     document.cookie = 'userSession=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
     router.push('/');
   };
 
-  // Extract size from description
   const extractSize = (description: string): string => {
     try {
       const sizeMatch = description.match(/(\d+(?:\s*[-+]\s*\d+)?\s*(?:sq\s*ft|square\s*feet|sft|sqft|sq\s*feet|sqmtrs|acres|sat))/i);
@@ -121,7 +158,6 @@ const InquiriesPage = () => {
     }
   };
 
-  // Show client details in modal
   const handleViewClient = (clientEmail: string, inquiry: Inquiry) => {
     const client = clients.find((c) => c.email === clientEmail);
     if (client) {
@@ -135,12 +171,10 @@ const InquiriesPage = () => {
     }
   };
 
-  // Show description in modal
-  const handleViewDescription = (description: string) => {
-    setModalContent(`Requirements/Description:\n${description || 'No description available'}`);
+  const handleViewDescription = (description: string, timeIST: string) => {
+    setModalContent(`Inquiry Date: ${timeIST || 'N/A'}\n\nRequirements/Description:\n${description || 'No description available'}`);
   };
 
-  // Close modal
   const closeModal = () => {
     setModalContent(null);
   };
@@ -153,12 +187,30 @@ const InquiriesPage = () => {
         <div className="max-w-7xl mx-auto">
           <div className="flex justify-between items-center mb-8">
             <h1 className="text-3xl font-bold text-white">Inquiries (Looking for Space)</h1>
-            <button
-              onClick={() => router.push('/dashboard')}
-              className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition-colors"
-            >
-              Back to Dashboard
-            </button>
+            <div className="flex space-x-4">
+              <button
+                onClick={() => handleSort('date')}
+                className={`px-4 py-2 rounded text-white transition-colors ${
+                  sortBy === 'date' ? 'bg-blue-600 hover:bg-blue-500' : 'bg-gray-700 hover:bg-gray-600'
+                }`}
+              >
+                Sort by Date {sortBy === 'date' ? (sortOrder === 'desc' ? '↓' : '↑') : ''}
+              </button>
+              <button
+                onClick={() => handleSort('size')}
+                className={`px-4 py-2 rounded text-white transition-colors ${
+                  sortBy === 'size' ? 'bg-blue-600 hover:bg-blue-500' : 'bg-gray-700 hover:bg-gray-600'
+                }`}
+              >
+                Sort by Size {sortBy === 'size' ? (sortOrder === 'desc' ? '↓' : '↑') : ''}
+              </button>
+              <button
+                onClick={() => router.push('/dashboard')}
+                className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition-colors"
+              >
+                Back to Dashboard
+              </button>
+            </div>
           </div>
 
           {loading ? (
@@ -200,7 +252,7 @@ const InquiriesPage = () => {
                             👤
                           </button>
                           <button
-                            onClick={() => handleViewDescription(inquiry.description)}
+                            onClick={() => handleViewDescription(inquiry.description, inquiry.timeIST)}
                             className="text-blue-400 hover:text-blue-300 transition-colors text-lg"
                             title="View Requirements/Description"
                           >

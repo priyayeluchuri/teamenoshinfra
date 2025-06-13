@@ -14,6 +14,7 @@ const Dashboard = () => {
     inquiries: [],
     clients: []
   });
+  const [uniqueClientsCount, setUniqueClientsCount] = useState(0);
   const [activeDealsCount, setActiveDealsCount] = useState(0);
   const [revenueActive, setRevenueActive] = useState(0);
   const [revenueClosed, setRevenueClosed] = useState(0);
@@ -28,13 +29,68 @@ const Dashboard = () => {
     };
   };
 
+  const removeDuplicateClients = (clients) => {
+    const seen = new Map();
+    
+    clients.forEach(client => {
+      const normalizedName = client.name.toLowerCase().trim();
+      const normalizedPhone = client.phone.replace(/\D/g, '');
+      const key = `${normalizedName}|${normalizedPhone}`;
+      
+      if (!seen.has(key)) {
+        seen.set(key, client);
+      } else {
+        const existing = seen.get(key);
+        const currentScore = getClientCompleteness(client);
+        const existingScore = getClientCompleteness(existing);
+        
+        if (currentScore > existingScore) {
+          seen.set(key, client);
+        }
+      }
+    });
+    
+    const uniqueClients = Array.from(seen.values());
+    console.log('Dashboard: Unique clients after deduplication:', uniqueClients.length, uniqueClients);
+    return uniqueClients;
+  };
+
+  const getClientCompleteness = (client) => {
+    let score = 0;
+    if (client.email && client.email.includes('@')) score += 1;
+    if (client.phone && client.phone.length >= 6) score += 1;
+    if (client.company && client.company !== 'Not provided') score += 1;
+    if (client.city) score += 1;
+    if (client.name && client.name !== 'Unknown') score += 1;
+    return score;
+  };
+
   const fetchSheetData = async () => {
     try {
       const response = await fetch('/api/sheets-data');
       const result = await response.json();
 
       if (result.success) {
-        setSheetData(result.data);
+        // Map clients from properties, matching clients.tsx logic
+        const mappedClients = result.data.properties.map((p, index) => ({
+          id: p.id,
+          name: p.Client || p.clientName || 'Unknown',
+          email: p.Email && p.Email.includes('@') ? p.Email : '',
+          phone: p.Phone && p.Phone.length >= 6 ? p.Phone : '',
+          company: p.Company && p.Company !== 'Not provided' ? p.Company : '',
+          city: p['Client City'] || '',
+          uniqueKey: `client-${index}-${p.id}`,
+        }));
+
+        const uniqueClients = removeDuplicateClients(mappedClients);
+        
+        setSheetData({
+          ...result.data,
+          clients: uniqueClients
+        });
+        
+        setUniqueClientsCount(uniqueClients.length);
+        console.log('Dashboard: Set unique clients count:', uniqueClients.length);
       } else {
         console.error('Failed to fetch sheet data:', result.error);
       }
@@ -66,7 +122,6 @@ const Dashboard = () => {
     try {
       const { startDate, endDate } = getFinancialYearRange();
 
-      // Fetch closed deals revenue for the current financial year
       const { data: closedDeals, error: closedError } = await supabaseClient
         .from('deals')
         .select('total_revenue')
@@ -81,7 +136,6 @@ const Dashboard = () => {
 
       const closedRevenue = closedDeals.reduce((sum, deal) => sum + (deal.total_revenue || 0), 0);
 
-      // Fetch active deals revenue
       const { data: activeDeals, error: activeError } = await supabaseClient
         .from('deals')
         .select('total_revenue')
@@ -216,7 +270,7 @@ const Dashboard = () => {
               </div>
               <p className="text-gray-400 mb-4">Total unique clients</p>
               <div className="text-3xl font-bold text-yellow-400">
-                {dataLoading ? '...' : sheetData.clients.length}
+                {dataLoading ? '...' : uniqueClientsCount}
               </div>
               <p className="text-sm text-yellow-400 mt-2">Click to view →</p>
             </div>
@@ -228,7 +282,8 @@ const Dashboard = () => {
                 <svg className="w-6 h-6 text-blue-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                 </svg>
-                <h3 className="text-xl font-semibold text-white">Properties</h3>
+                <h3 className=" ≥
+text-xl font-semibold text-white">Properties</h3>
               </div>
               <p className="text-gray-400 mb-4">Properties looking for tenants</p>
               <div className="text-3xl font-bold text-blue-400">

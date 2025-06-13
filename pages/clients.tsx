@@ -46,6 +46,42 @@ const ClientsPage = () => {
     checkAuth();
   }, [router]);
 
+  const removeDuplicateClients = (clients: Client[]): Client[] => {
+    const seen = new Map<string, Client>();
+    
+    clients.forEach(client => {
+      // Create a key based on name and phone combination
+      // Normalize the name and phone for comparison
+      const normalizedName = client.name.toLowerCase().trim();
+      const normalizedPhone = client.phone.replace(/\D/g, ''); // Remove non-digits
+      const key = `${normalizedName}|${normalizedPhone}`;
+      
+      if (!seen.has(key)) {
+        seen.set(key, client);
+      } else {
+        // If duplicate found, keep the one with more complete information
+        const existing = seen.get(key)!;
+        const currentScore = getClientCompleteness(client);
+        const existingScore = getClientCompleteness(existing);
+        
+        if (currentScore > existingScore) {
+          seen.set(key, client);
+        }
+      }
+    });
+    
+    return Array.from(seen.values());
+  };
+
+  const getClientCompleteness = (client: Client): number => {
+    let score = 0;
+    if (client.email && client.email.includes('@')) score += 1;
+    if (client.phone && client.phone.length >= 6) score += 1;
+    if (client.company && client.company !== 'Not provided') score += 1;
+    if (client.city) score += 1;
+    if (client.name && client.name !== 'Unknown') score += 1;
+    return score;
+  };
 
   const fetchClients = async () => {
     try {
@@ -63,7 +99,10 @@ const ClientsPage = () => {
           city: p['Client City'] || '',
           uniqueKey: `client-${index}-${p.id}`,
         }));
-        setClients(mappedClients);
+
+        // Remove duplicates based on name and phone combination
+        const uniqueClients = removeDuplicateClients(mappedClients);
+        setClients(uniqueClients);
       }
     } catch (error) {
       console.error('Error fetching clients:', error);
@@ -248,4 +287,3 @@ const ClientsPage = () => {
 };
 
 export default ClientsPage;
-
