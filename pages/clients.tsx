@@ -33,7 +33,7 @@ const ClientsPage = () => {
           const data = await res.json();
           setUser({ email: data.email });
           setLoading(false);
-          fetchClients(); // Call this only when logged in
+          fetchClients();
         }
       } catch (error) {
         console.error('Error checking auth:', error);
@@ -50,33 +50,31 @@ const ClientsPage = () => {
     const seen = new Map<string, Client>();
     
     clients.forEach(client => {
-      // Create a key based on name and phone combination
-      // Normalize the name and phone for comparison
-      const normalizedName = client.name.toLowerCase().trim();
-      const normalizedPhone = client.phone.replace(/\D/g, ''); // Remove non-digits
-      const key = `${normalizedName}|${normalizedPhone}`;
+      const key = client.email?.toLowerCase().trim() || 
+                  `${client.name?.toLowerCase().trim() || 'unknown'}|${client.phone?.replace(/\D/g, '') || 'nophone'}`;
       
       if (!seen.has(key)) {
         seen.set(key, client);
       } else {
-        // If duplicate found, keep the one with more complete information
         const existing = seen.get(key)!;
         const currentScore = getClientCompleteness(client);
         const existingScore = getClientCompleteness(existing);
         
-        if (currentScore > existingScore) {
+        if (currentScore >= existingScore) {
           seen.set(key, client);
         }
       }
     });
     
-    return Array.from(seen.values());
+    const uniqueClients = Array.from(seen.values());
+    console.log('Clients: Unique clients after deduplication:', uniqueClients.length, uniqueClients);
+    return uniqueClients;
   };
 
   const getClientCompleteness = (client: Client): number => {
     let score = 0;
-    if (client.email && client.email.includes('@')) score += 1;
-    if (client.phone && client.phone.length >= 6) score += 1;
+    if (client.email) score += 1;
+    if (client.phone) score += 1;
     if (client.company && client.company !== 'Not provided') score += 1;
     if (client.city) score += 1;
     if (client.name && client.name !== 'Unknown') score += 1;
@@ -89,20 +87,43 @@ const ClientsPage = () => {
       const result = await response.json();
 
       if (result.success) {
-        // Map incoming data to Client format
-        const mappedClients: Client[] = result.data.properties.map((p: any, index: number) => ({
-          id: p.id,
-          name: p.Client || p.clientName || 'Unknown',
-          email: p.Email && p.Email.includes('@') ? p.Email : '',
-          phone: p.Phone && p.Phone.length >= 6 ? p.Phone : '',
-          company: p.Company && p.Company !== 'Not provided' ? p.Company : '',
-          city: p['Client City'] || '',
-          uniqueKey: `client-${index}-${p.id}`,
-        }));
+        console.log('Clients: Raw API response:', result.data);
+        
+        const clientSource = result.data.clients?.length ? result.data.clients : result.data.properties || [];
+        console.log('Clients: Using data source:', result.data.clients?.length ? 'clients' : 'properties', clientSource.length);
 
-        // Remove duplicates based on name and phone combination
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const phoneRegex = /^\+?[\d\s-]{6,}$/;
+        console.log('Raw client keys:', Object.keys(clientSource[0]));
+	console.log('Sheets raw row sample:', clientSource[0]);
+        const mappedClients: Client[] = clientSource.map((c: any, index: number) => {
+          // Raw field values
+          const rawEmail = c.Email || c.email || '';
+          const rawPhone = c.Phone || c.phone || '';
+          const rawCity = c[' Client City'] || c['Client City'] || c.city || '';
+          // Validate and assign fields
+          let email = emailRegex.test(rawEmail) ? rawEmail : '';
+          let phone = phoneRegex.test(rawPhone) ? rawPhone : phoneRegex.test(rawEmail) ? rawEmail : '';
+          let city = rawCity || '';
+
+          const client = {
+            id: c.id || index + 1,
+            name: c.Client || c.clientName || c.name || 'Unknown',
+            email,
+            phone,
+            company: c.Company || c.company || '',
+            city,
+            uniqueKey: `client-${index}-${c.id || index}`,
+          };
+          console.log(`Clients: Mapped client ${index + 1}:`, client);
+          return client;
+        });
+
+
         const uniqueClients = removeDuplicateClients(mappedClients);
         setClients(uniqueClients);
+      } else {
+        console.error('Clients: API response unsuccessful:', result.error);
       }
     } catch (error) {
       console.error('Error fetching clients:', error);
@@ -129,9 +150,9 @@ const ClientsPage = () => {
   };
 
   const filteredClients = clients.filter((client) =>
-    client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    client.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    client.phone.includes(searchTerm)
+    (client.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+    (client.email?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+    (client.phone || '').includes(searchTerm)
   );
 
   return (
@@ -150,7 +171,6 @@ const ClientsPage = () => {
             </button>
           </div>
 
-          {/* Search Bar */}
           <div className="mb-6">
             <input
               type="text"
@@ -171,7 +191,6 @@ const ClientsPage = () => {
             </div>
           ) : (
             <>
-              {/* Client Cards Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                 {filteredClients.map((client) => (
                   <div key={client.uniqueKey} className="bg-gray-800 rounded-lg p-6 hover:bg-gray-700 transition-colors">
@@ -227,7 +246,6 @@ const ClientsPage = () => {
                 ))}
               </div>
 
-              {/* Client Table */}
               <div className="bg-gray-800 rounded-lg overflow-hidden">
                 <h2 className="text-xl font-semibold text-white p-6 border-b border-gray-700">
                   All Clients ({filteredClients.length})

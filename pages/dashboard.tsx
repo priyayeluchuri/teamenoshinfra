@@ -4,6 +4,16 @@ import DashboardNavbar from '../components/DashboardNavbar';
 import Footer from '../components/Footer';
 import { createSupabaseClient } from '../lib/supabase';
 
+interface Client {
+  id: number;
+  name: string;
+  email: string;
+  phone: string;
+  uniqueKey: string;
+  company?: string;
+  city?: string;
+}
+
 const Dashboard = () => {
   console.log('Dashboard component rendering');
   const router = useRouter();
@@ -29,22 +39,21 @@ const Dashboard = () => {
     };
   };
 
-  const removeDuplicateClients = (clients) => {
-    const seen = new Map();
+  const removeDuplicateClients = (clients: Client[]): Client[] => {
+    const seen = new Map<string, Client>();
     
     clients.forEach(client => {
-      const normalizedName = client.name.toLowerCase().trim();
-      const normalizedPhone = client.phone.replace(/\D/g, '');
-      const key = `${normalizedName}|${normalizedPhone}`;
+      const key = client.email?.toLowerCase().trim() || 
+                  `${client.name?.toLowerCase().trim() || 'unknown'}|${client.phone?.replace(/\D/g, '') || 'nophone'}`;
       
       if (!seen.has(key)) {
         seen.set(key, client);
       } else {
-        const existing = seen.get(key);
+        const existing = seen.get(key)!;
         const currentScore = getClientCompleteness(client);
         const existingScore = getClientCompleteness(existing);
         
-        if (currentScore > existingScore) {
+        if (currentScore >= existingScore) {
           seen.set(key, client);
         }
       }
@@ -55,10 +64,10 @@ const Dashboard = () => {
     return uniqueClients;
   };
 
-  const getClientCompleteness = (client) => {
+  const getClientCompleteness = (client: Client): number => {
     let score = 0;
-    if (client.email && client.email.includes('@')) score += 1;
-    if (client.phone && client.phone.length >= 6) score += 1;
+    if (client.email) score += 1;
+    if (client.phone) score += 1;
     if (client.company && client.company !== 'Not provided') score += 1;
     if (client.city) score += 1;
     if (client.name && client.name !== 'Unknown') score += 1;
@@ -71,16 +80,40 @@ const Dashboard = () => {
       const result = await response.json();
 
       if (result.success) {
-        // Map clients from properties, matching clients.tsx logic
-        const mappedClients = result.data.properties.map((p, index) => ({
-          id: p.id,
-          name: p.Client || p.clientName || 'Unknown',
-          email: p.Email && p.Email.includes('@') ? p.Email : '',
-          phone: p.Phone && p.Phone.length >= 6 ? p.Phone : '',
-          company: p.Company && p.Company !== 'Not provided' ? p.Company : '',
-          city: p['Client City'] || '',
-          uniqueKey: `client-${index}-${p.id}`,
-        }));
+        console.log('Dashboard: Raw API response:', result.data);
+        
+        const clientSource = result.data.clients?.length ? result.data.clients : result.data.properties || [];
+        console.log('Dashboard: Using data source:', result.data.clients?.length ? 'clients' : 'properties', clientSource.length);
+        if (clientSource.length > 0) {
+          console.log('Dashboard: Raw client keys:', Object.keys(clientSource[0]));
+          console.log('Dashboard: Sheets raw row sample:', clientSource[0]);
+        }
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const phoneRegex = /^\+?[\d\s-]{6,}$/;
+
+        const mappedClients: Client[] = clientSource.map((c: any, index: number) => {
+          const rawEmail = c.Email || c.email || '';
+          const rawPhone = c.Phone || c.phone || '';
+          const rawCity = c['Client City'] || c.city || ''; // Fixed key without leading space
+
+          let email = emailRegex.test(rawEmail) ? rawEmail : '';
+          let phone = phoneRegex.test(rawPhone) ? rawPhone : phoneRegex.test(rawEmail) ? rawEmail : '';
+          let city = rawCity || '';
+
+          const client = {
+            id: c.id || index + 1,
+            name: c.Client || c.clientName || c.name || 'Unknown',
+            email,
+            phone,
+            company: c.Company || c.company || '',
+            city,
+            uniqueKey: `client-${index}-${c.id || index}`,
+          };
+          console.log(`Dashboard: Mapped client ${index + 1}:`, client);
+          return client;
+        });
+
 
         const uniqueClients = removeDuplicateClients(mappedClients);
         
@@ -92,7 +125,7 @@ const Dashboard = () => {
         setUniqueClientsCount(uniqueClients.length);
         console.log('Dashboard: Set unique clients count:', uniqueClients.length);
       } else {
-        console.error('Failed to fetch sheet data:', result.error);
+        console.error('Dashboard: API response unsuccessful:', result.error);
       }
     } catch (error) {
       console.error('Error fetching sheet data:', error);
@@ -282,8 +315,7 @@ const Dashboard = () => {
                 <svg className="w-6 h-6 text-blue-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                 </svg>
-                <h3 className=" ≥
-text-xl font-semibold text-white">Properties</h3>
+                <h3 className="text-xl font-semibold text-white">Properties</h3>
               </div>
               <p className="text-gray-400 mb-4">Properties looking for tenants</p>
               <div className="text-3xl font-bold text-blue-400">
