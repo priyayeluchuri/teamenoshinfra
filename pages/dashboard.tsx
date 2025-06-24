@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import DashboardNavbar from '../components/DashboardNavbar';
 import Footer from '../components/Footer';
 import { createSupabaseClient } from '../lib/supabase';
+import { SupabaseClient } from '@supabase/supabase-js';
 
 interface Client {
   id: number;
@@ -14,21 +15,31 @@ interface Client {
   city?: string;
 }
 
+interface User {
+  email: string;
+}
+
+interface SheetData {
+  properties: any[];
+  inquiries: any[];
+  clients: Client[];
+}
+
 const Dashboard = () => {
   console.log('Dashboard component rendering');
   const router = useRouter();
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [sheetData, setSheetData] = useState({
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [sheetData, setSheetData] = useState<SheetData>({
     properties: [],
     inquiries: [],
     clients: []
   });
-  const [uniqueClientsCount, setUniqueClientsCount] = useState(0);
-  const [activeDealsCount, setActiveDealsCount] = useState(0);
-  const [revenueActive, setRevenueActive] = useState(0);
-  const [revenueClosed, setRevenueClosed] = useState(0);
-  const [dataLoading, setDataLoading] = useState(true);
+  const [uniqueClientsCount, setUniqueClientsCount] = useState<number>(0);
+  const [activeDealsCount, setActiveDealsCount] = useState<number>(0);
+  const [revenueActive, setRevenueActive] = useState<number>(0);
+  const [revenueClosed, setRevenueClosed] = useState<number>(0);
+  const [dataLoading, setDataLoading] = useState<boolean>(true);
 
   const getFinancialYearRange = () => {
     const today = new Date();
@@ -74,7 +85,7 @@ const Dashboard = () => {
     return score;
   };
 
-  const fetchSheetData = async () => {
+  const fetchSheetData = async (): Promise<void> => {
     try {
       const response = await fetch('/api/sheets-data');
       const result = await response.json();
@@ -114,7 +125,6 @@ const Dashboard = () => {
           return client;
         });
 
-
         const uniqueClients = removeDuplicateClients(mappedClients);
         
         setSheetData({
@@ -132,7 +142,7 @@ const Dashboard = () => {
     }
   };
 
-  const fetchDeals = async (supabaseClient, userEmail) => {
+  const fetchDeals = async (supabaseClient: SupabaseClient, userEmail: string): Promise<void> => {
     try {
       const { count, error } = await supabaseClient
         .from('deals')
@@ -151,7 +161,7 @@ const Dashboard = () => {
     }
   };
 
-  const fetchRevenue = async (supabaseClient, userEmail) => {
+  const fetchRevenue = async (supabaseClient: SupabaseClient, userEmail: string): Promise<void> => {
     try {
       const { startDate, endDate } = getFinancialYearRange();
 
@@ -191,7 +201,7 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
-    async function checkAuth() {
+    async function checkAuth(): Promise<void> {
       try {
         console.log('lets check auth');
         const res = await fetch('/api/auth/me', { credentials: 'include' });
@@ -226,7 +236,7 @@ const Dashboard = () => {
     checkAuth();
   }, [router]);
 
-  const handleSignOut = async () => {
+  const handleSignOut = async (): Promise<void> => {
     try {
       await fetch('/api/auth/logout');
       router.push('/');

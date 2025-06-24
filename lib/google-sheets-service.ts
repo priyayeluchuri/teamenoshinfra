@@ -228,8 +228,10 @@ export async function parseExcelFile(): Promise<SheetData> {
 
         // Extract client information
         const clientName = row[0] || ''; // Column A
-        const clientEmail = row[6] || ''; // Column G
-        const clientPhone = row[10] || ''; // Column K
+        const clientEmail = row[5] || ''; // Column F (updated to match Google Sheets)
+        const clientPhone = row[6] || ''; // Column G (updated to match Google Sheets)
+        const clientCity = row[10] || ''; // Column K (added missing variable)
+        const clientCompany = row[7] || ''; // Column H (added missing variable)
         
         // Create unique key for client
         const clientKey = `${clientName}_${clientEmail}`.toLowerCase();
@@ -283,8 +285,8 @@ export async function parseExcelFile(): Promise<SheetData> {
             name: clientName,
             email: clientEmail,
             phone: clientPhone,
-	    city: clientCity,
-	    company: clientCompany,
+            city: clientCity,
+            company: clientCompany,
             uniqueKey: clientKey
           });
         }
