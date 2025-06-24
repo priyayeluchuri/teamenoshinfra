@@ -7,6 +7,8 @@ interface ClientInfo {
   name: string;
   email: string;
   phone: string;
+  city: string;
+  company: string;
   uniqueKey: string;
 }
 
@@ -108,9 +110,10 @@ export async function fetchSheetData(): Promise<SheetData> {
 
       // Extract client information
       const clientName = row[0] || ''; // Column A
-      const clientEmail = row[6] || ''; // Column G
-      const clientPhone = row[10] || ''; // Column K
-      
+      const clientEmail = row[5] || ''; // Column F
+      const clientPhone = row[6] || ''; // Column G
+      const clientCity = row[10] || ''; // Column K
+      const clientCompany = row[7] || ''; //column H 
       // Create unique key for client (combination of name and email)
       const clientKey = `${clientName}_${clientEmail}`.toLowerCase();
 
@@ -163,6 +166,8 @@ export async function fetchSheetData(): Promise<SheetData> {
           name: clientName,
           email: clientEmail,
           phone: clientPhone,
+	  city: clientCity,
+	  company: clientCompany,
           uniqueKey: clientKey
         });
       }
@@ -278,6 +283,8 @@ export async function parseExcelFile(): Promise<SheetData> {
             name: clientName,
             email: clientEmail,
             phone: clientPhone,
+	    city: clientCity,
+	    company: clientCompany,
             uniqueKey: clientKey
           });
         }
