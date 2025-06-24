@@ -8,45 +8,34 @@ import DashboardNavbar from '../components/DashboardNavbar';
 interface User {
   email: string;
 }
+
 const formatIndianCurrency = (numInput: number | string | null | undefined): string => {
-  // Return empty string for null, undefined, or empty input
   if (numInput === null || numInput === undefined || numInput === '') {
     return '';
   }
 
   const numStr = String(numInput);
-  // Check if the original input string ended with a decimal point
   const isTrailingDecimal = numStr.endsWith('.');
 
-  // Clean the string: remove any characters that are not digits or a decimal point.
-  // This ensures only valid numeric characters are processed.
   const cleanedNumStr = numStr.replace(/[^0-9.]/g, '');
 
-  // Handle cases where the input is just "." or becomes empty after cleaning
   if (cleanedNumStr === '' || cleanedNumStr === '.') {
     return cleanedNumStr;
   }
 
-  // Split the number into integer and decimal parts
   let [integerPart, decimalPart] = cleanedNumStr.split('.');
 
-  // Apply Indian comma formatting to the integer part
-  // The first comma is after 3 digits from the right, then every 2 digits.
   if (integerPart.length > 3) {
     let lastThree = integerPart.substring(integerPart.length - 3);
     let otherNumbers = integerPart.substring(0, integerPart.length - 3);
-    // Use regex to insert commas for every two digits in the 'otherNumbers' part
     otherNumbers = otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ',');
     integerPart = otherNumbers + ',' + lastThree;
   }
 
-  // Reconstruct the formatted value
   let formattedValue = integerPart;
-  // If there was a decimal part, append it
   if (decimalPart !== undefined) {
     formattedValue += `.${decimalPart}`;
   } else if (isTrailingDecimal) {
-    // If the original input had a trailing decimal (e.g., "123."), preserve it for typing experience
     formattedValue += '.';
   }
 
@@ -55,7 +44,7 @@ const formatIndianCurrency = (numInput: number | string | null | undefined): str
 
 const DealsPage = () => {
   const [deals, setDeals] = useState<Deal[]>([]);
-  const [filter, setFilter] = useState<'Active' | 'Closed' | 'All'>('All');
+  const [filter, setFilter] = useState<'Active' | 'Payment Pending' | 'Closed' | 'Cancelled' | 'All'>('All');
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
@@ -71,10 +60,14 @@ const DealsPage = () => {
     cost_or_budget: 0,
     size: 0,
     start_date: new Date().toISOString().split('T')[0],
+    payment_date: null,
+    closed_date: null,
   });
 
   const router = useRouter();
   const ADMIN_EMAIL = 'admin@enoshinfra.com';
+
+  const validStatuses = ['Active', 'Payment Pending', 'Closed', 'Cancelled'] as const;
 
   const filteredDeals = deals && Array.isArray(deals)
     ? filter === 'All'
@@ -164,10 +157,10 @@ const DealsPage = () => {
         const userData = { email: userEmail };
         setUser(userData);
 
-        setNewDeal((prev) => ({
-          ...prev,
+        setNewDeal(( gotten) => ({
+          ...gotten,
           created_by: userEmail,
-          start_date: prev.start_date || new Date().toISOString().split('T')[0],
+          start_date: gotten.start_date || new Date().toISOString().split('T')[0],
         }));
 
         const dealsData = await loadDeals(supabaseClient, userEmail);
@@ -183,13 +176,30 @@ const DealsPage = () => {
     initializeApp();
   }, [router]);
 
-  const handleStatusChange = (newStatus: 'Active' | 'Closed') => {
+  const handleStatusChange = (newStatus: 'Active' | 'Payment Pending' | 'Closed' | 'Cancelled') => {
     const updatedDeal = { ...newDeal, status: newStatus };
+    const currentDate = new Date().toISOString().split('T')[0];
 
-    if (newStatus === 'Closed' && !updatedDeal.closed_date) {
-      updatedDeal.closed_date = new Date().toISOString().split('T')[0];
+    if (newStatus === 'Closed') {
+      if (!updatedDeal.payment_date && newDeal.status === 'Active') {
+        updatedDeal.payment_date = currentDate;
+      }
+      if (!updatedDeal.closed_date) {
+        updatedDeal.closed_date = currentDate;
+      }
+    } else if (newStatus === 'Payment Pending') {
+      if (!updatedDeal.payment_date) {
+        updatedDeal.payment_date = currentDate;
+      }
+      updatedDeal.closed_date = null;
+    } else if (newStatus === 'Cancelled') {
+      if (!updatedDeal.closed_date) {
+        updatedDeal.closed_date = currentDate;
+      }
+      updatedDeal.payment_date = null;
     } else if (newStatus === 'Active') {
-      updatedDeal.closed_date = '';
+      updatedDeal.payment_date = null;
+      updatedDeal.closed_date = null;
     }
 
     setNewDeal(updatedDeal);
@@ -204,6 +214,8 @@ const DealsPage = () => {
       cost_or_budget: 0,
       size: 0,
       start_date: new Date().toISOString().split('T')[0],
+      payment_date: null,
+      closed_date: null,
       created_by: user?.email || '',
     });
   };
@@ -235,6 +247,7 @@ const DealsPage = () => {
       revenue_from_tenant: newDeal.revenue_from_tenant ? parseFloat(String(newDeal.revenue_from_tenant)) : 0,
       notes: newDeal.notes?.trim() || '',
       start_date: newDeal.start_date || new Date().toISOString().split('T')[0],
+      payment_date: newDeal.payment_date || null,
       closed_date: newDeal.closed_date || null,
       created_by: user.email,
     };
@@ -245,7 +258,14 @@ const DealsPage = () => {
       return;
     }
 
+    if (!validStatuses.includes(dealToInsert.status)) {
+      setError(`Invalid status value: ${dealToInsert.status}`);
+      setLoading(false);
+      return;
+    }
+
     try {
+      console.log('Inserting deal with status:', dealToInsert.status);
       const { error } = await supabase.from('deals').insert([dealToInsert]);
       if (error) {
         throw new Error(`Supabase error: ${error.message} (Code: ${error.code})`);
@@ -281,27 +301,35 @@ const DealsPage = () => {
     setLoading(true);
     setError(null);
 
+    const dealToUpdate = {
+      status: newDeal.status || 'Active',
+      service_type: newDeal.service_type || 'Owner',
+      customer: newDeal.customer?.trim() || '',
+      location: newDeal.location?.trim() || '',
+      size: newDeal.size ? parseFloat(String(newDeal.size)) : 0,
+      cost_or_budget: newDeal.cost_or_budget ? parseFloat(String(newDeal.cost_or_budget)) : 0,
+      revenue_from_owner: newDeal.revenue_from_owner ? parseFloat(String(newDeal.revenue_from_owner)) : 0,
+      revenue_from_tenant: newDeal.revenue_from_tenant ? parseFloat(String(newDeal.revenue_from_tenant)) : 0,
+      notes: newDeal.notes?.trim() || '',
+      start_date: newDeal.start_date || new Date().toISOString().split('T')[0],
+      payment_date: newDeal.payment_date || null,
+      closed_date: newDeal.closed_date || null,
+    };
+
+    if (!dealToUpdate.customer || !dealToUpdate.location) {
+      setError('Customer and Location are required fields.');
+      setLoading(false);
+      return;
+    }
+
+    if (!validStatuses.includes(dealToUpdate.status)) {
+      setError(`Invalid status value: ${dealToUpdate.status}`);
+      setLoading(false);
+      return;
+    }
+
     try {
-      const dealToUpdate = {
-        status: newDeal.status || 'Active',
-        service_type: newDeal.service_type || 'Owner',
-        customer: newDeal.customer?.trim() || '',
-        location: newDeal.location?.trim() || '',
-        size: newDeal.size ? parseFloat(String(newDeal.size)) : 0,
-        cost_or_budget: newDeal.cost_or_budget ? parseFloat(String(newDeal.cost_or_budget)) : 0,
-        revenue_from_owner: newDeal.revenue_from_owner ? parseFloat(String(newDeal.revenue_from_owner)) : 0,
-        revenue_from_tenant: newDeal.revenue_from_tenant ? parseFloat(String(newDeal.revenue_from_tenant)) : 0,
-        notes: newDeal.notes?.trim() || '',
-        start_date: newDeal.start_date || new Date().toISOString().split('T')[0],
-        closed_date: newDeal.closed_date || null,
-      };
-
-      if (!dealToUpdate.customer || !dealToUpdate.location) {
-        setError('Customer and Location are required fields.');
-        setLoading(false);
-        return;
-      }
-
+      console.log('Updating deal with status:', dealToUpdate.status);
       const { error } = await supabase
         .from('deals')
         .update(dealToUpdate)
@@ -376,30 +404,24 @@ const DealsPage = () => {
       revenue_from_tenant: deal.revenue_from_tenant ?? 0,
       cost_or_budget: deal.cost_or_budget ?? 0,
       size: deal.size ?? 0,
+      payment_date: deal.payment_date ?? null,
+      closed_date: deal.closed_date ?? null,
     });
     setShowEditForm(true);
   };
 
-   // Modified handleNumericChange to store cleaned string value in state
   const handleNumericChange = (
     field: 'revenue_from_owner' | 'revenue_from_tenant' | 'cost_or_budget' | 'size',
     value: string
   ) => {
-    // Remove all characters that are not digits or a single decimal point.
-    // This allows for numbers like "123", "123.45", ".5", "123.".
-    // It prevents multiple decimal points by only taking the first part split by '.'
     const parts = value.split('.');
-    let cleanedValue = parts[0].replace(/[^0-9]/g, ''); // Clean integer part (remove non-digits)
+    let cleanedValue = parts[0].replace(/[^0-9]/g, '');
     if (parts.length > 1) {
-      // If there's a decimal part, append it after cleaning it (remove non-digits from decimal part)
       cleanedValue += '.' + parts.slice(1).join('').replace(/[^0-9]/g, '');
     }
 
-    // Update the state with the cleaned string value.
-    // The input's value prop will then use formatIndianCurrency to display this string.
     setNewDeal((prev) => ({ ...prev, [field]: cleanedValue }));
   };
-
 
   return (
     <div className="min-h-screen bg-gray-900 flex flex-col">
@@ -438,12 +460,14 @@ const DealsPage = () => {
                   <select
                     id="statusFilter"
                     value={filter}
-                    onChange={(e) => setFilter(e.target.value as 'Active' | 'Closed' | 'All')}
+                    onChange={(e) => setFilter(e.target.value as 'Active' | 'Payment Pending' | 'Closed' | 'Cancelled' | 'All')}
                     className="p-2 border rounded bg-gray-800 text-white border-gray-600"
                   >
                     <option value="All">All</option>
                     <option value="Active">Active</option>
+                    <option value="Payment Pending">Payment Pending</option>
                     <option value="Closed">Closed</option>
+                    <option value="Cancelled">Cancelled</option>
                   </select>
                 </div>
                 <div className="flex gap-2">
@@ -481,11 +505,23 @@ const DealsPage = () => {
                         <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
                           {deal.customer ? deal.customer.charAt(0).toUpperCase() : '?'}
                         </div>
-                        <div className="ml-4">
+                        <div className="ml-4 flex-grow">
                           <h3 className="text-lg font-semibold text-white">
                             {deal.customer || 'Unknown Deal'}
                           </h3>
-                          <p className="text-sm text-gray-400">ID: {deal.id}</p>
+                          <span
+                            className={`inline-block px-2 py-1 mt-1 rounded text-xs font-medium ${
+                              deal.status === 'Active'
+                                ? 'bg-blue-200 text-blue-800'
+                                : deal.status === 'Payment Pending'
+                                ? 'bg-yellow-200 text-yellow-800'
+                                : deal.status === 'Closed'
+                                ? 'bg-red-200 text-red-800'
+                                : 'bg-gray-200 text-gray-800'
+                            }`}
+                          >
+                            {deal.status}
+                          </span>
                         </div>
                       </div>
                       <div className="space-y-2 text-sm text-gray-300">
@@ -592,8 +628,12 @@ const DealsPage = () => {
                       <span
                         className={`inline-block px-2 py-1 rounded text-xs font-medium ${
                           selectedDeal.status === 'Active'
-                            ? 'bg-green-200 text-green-800'
-                            : 'bg-red-200 text-red-800'
+                            ? 'bg-blue-200 text-blue-800'
+                            : selectedDeal.status === 'Payment Pending'
+                            ? 'bg-yellow-200 text-yellow-800'
+                            : selectedDeal.status === 'Closed'
+                            ? 'bg-red-200 text-red-800'
+                            : 'bg-gray-200 text-gray-800'
                         }`}
                       >
                         {selectedDeal.status}
@@ -636,6 +676,10 @@ const DealsPage = () => {
                     <div className="flex items-center">
                       <span className="font-medium text-gray-400 w-24">Start Date:</span>
                       <span>{selectedDeal.start_date || 'N/A'}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <span className="font-medium text-gray-400 w-24">Payment Date:</span>
+                      <span>{selectedDeal.payment_date || 'N/A'}</span>
                     </div>
                     <div className="flex items-center">
                       <span className="font-medium text-gray-400 w-24">Closed Date:</span>
@@ -682,12 +726,29 @@ const DealsPage = () => {
                     {showEditForm ? 'Edit Deal' : 'Add New Deal'}
                   </h2>
                 </div>
-                <div className="overflow-y-auto px-6 py-4 grow">
+                <div className="overflow-y-auto px-8 py-6 grow">
                   <form
                     id="deal-form"
                     onSubmit={showEditForm ? handleEditDeal : handleAddDeal}
-                    className="space-y-4"
+                    className="space-y-6"
                   >
+                    <div>
+                      <label className="block mb-1 text-sm font-medium">
+                        Status
+                      </label>
+                      <select
+                        value={newDeal.status || 'Active'}
+                        onChange={(e) =>
+                          handleStatusChange(e.target.value as 'Active' | 'Payment Pending' | 'Closed' | 'Cancelled')
+                        }
+                        className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-sm"
+                      >
+                        <option value="Active">Active</option>
+                        <option value="Payment Pending">Payment Pending</option>
+                        <option value="Closed">Closed</option>
+                        <option value="Cancelled">Cancelled</option>
+                      </select>
+                    </div>
                     <div>
                       <label className="block mb-1 text-sm font-medium">
                         Customer *
@@ -722,21 +783,6 @@ const DealsPage = () => {
                     </div>
                     <div>
                       <label className="block mb-1 text-sm font-medium">
-                        Status
-                      </label>
-                      <select
-                        value={newDeal.status || 'Active'}
-                        onChange={(e) =>
-                          handleStatusChange(e.target.value as 'Active' | 'Closed')
-                        }
-                        className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-sm"
-                      >
-                        <option value="Active">Active</option>
-                        <option value="Closed">Closed</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block mb-1 text-sm font-medium">
                         Location *
                       </label>
                       <input
@@ -756,7 +802,7 @@ const DealsPage = () => {
                         </label>
                         <input
                           type="text"
-                          value={newDeal.size || ''}
+                          value={formatIndianCurrency(newDeal.size)}
                           onChange={(e) => handleNumericChange('size', e.target.value)}
                           className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-sm"
                           placeholder="e.g., 1200"
@@ -768,7 +814,7 @@ const DealsPage = () => {
                         </label>
                         <input
                           type="text"
-                          value={newDeal.cost_or_budget || ''}
+                          value={formatIndianCurrency(newDeal.cost_or_budget)}
                           onChange={(e) =>
                             handleNumericChange('cost_or_budget', e.target.value)
                           }
@@ -784,7 +830,7 @@ const DealsPage = () => {
                         </label>
                         <input
                           type="text"
-			  value={formatIndianCurrency(newDeal.revenue_from_owner)}
+                          value={formatIndianCurrency(newDeal.revenue_from_owner)}
                           onChange={(e) =>
                             handleNumericChange('revenue_from_owner', e.target.value)
                           }
@@ -798,7 +844,7 @@ const DealsPage = () => {
                         </label>
                         <input
                           type="text"
-			  value={formatIndianCurrency(newDeal.revenue_from_tenant)}
+                          value={formatIndianCurrency(newDeal.revenue_from_tenant)}
                           onChange={(e) =>
                             handleNumericChange('revenue_from_tenant', e.target.value)
                           }
@@ -839,24 +885,61 @@ const DealsPage = () => {
                         />
                       </div>
                       <div>
-                        <label className="block mb-1 text-sm font-medium">
-                          Closed Date
-                        </label>
+                        <div className="flex items-center gap-2 mb-1">
+                          <label className="block text-sm font-medium">
+                            Payment Date
+                          </label>
+                          <div className="relative group">
+                            <span
+                              aria-label="Tooltip for payment date"
+                              tabIndex={0}
+                              className="inline-flex items-center justify-center w-4 h-4 bg-gray-400 text-gray-800 rounded-full text-xs font-medium cursor-help"
+                            >
+                              i
+                            </span>
+                            <span className="absolute z-10 invisible group-hover:visible bg-gray-200 text-gray-800 text-xs rounded-md p-2 w-48 top-6 left-0 -translate-x-1/4">
+                              Auto-filled when status is set to 'Payment Pending' or 'Closed'
+                            </span>
+                          </div>
+                        </div>
                         <input
                           type="date"
-                          value={newDeal.closed_date || ''}
+                          value={newDeal.payment_date || ''}
                           onChange={(e) =>
-                            setNewDeal({ ...newDeal, closed_date: e.target.value })
+                            setNewDeal({ ...newDeal, payment_date: e.target.value })
                           }
                           className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-sm"
-                          disabled={newDeal.status !== 'Closed'}
+                          disabled={newDeal.status !== 'Payment Pending' && newDeal.status !== 'Closed'}
                         />
-                        {newDeal.status !== 'Closed' && (
-                          <p className="text-xs text-gray-400 mt-1">
-                            Auto-filled when status is set to 'Closed'
-                          </p>
-                        )}
                       </div>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <label className="block text-sm font-medium">
+                          Closed Date
+                        </label>
+                        <div className="relative group">
+                          <span
+                            aria-label="Tooltip for closed date"
+                            tabIndex={0}
+                            className="inline-flex items-center justify-center w-4 h-4 bg-gray-400 text-gray-800 rounded-full text-xs font-medium cursor-help"
+                          >
+                            i
+                          </span>
+                          <span className="absolute z-10 invisible group-hover:visible bg-gray-200 text-gray-800 text-xs rounded-md p-2 w-48 top-6 left-0 -translate-x-1/4">
+                            Auto-filled when status is set to 'Closed' or 'Cancelled'
+                          </span>
+                        </div>
+                      </div>
+                      <input
+                        type="date"
+                        value={newDeal.closed_date || ''}
+                        onChange={(e) =>
+                          setNewDeal({ ...newDeal, closed_date: e.target.value })
+                        }
+                        className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-sm"
+                        disabled={newDeal.status !== 'Closed' && newDeal.status !== 'Cancelled'}
+                      />
                     </div>
                     <div>
                       <label className="block mb-1 text-sm font-medium">

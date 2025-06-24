@@ -1,6 +1,6 @@
 export interface Deal {
   id: string;
-  status: 'Active' | 'Closed';
+  status: 'Active' | 'Payment Pending' | 'Closed' | 'Cancelled';
   service_type: 'Owner' | 'Tenant';
   customer: string;
   location: string;
@@ -13,5 +13,6 @@ export interface Deal {
   property_or_inquiry_link: string;
   start_date?: string;
   closed_date?: string | null;
+  payment_date?: string | null;
   created_by: string;
 }
